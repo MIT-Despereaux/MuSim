@@ -16,7 +16,7 @@ import MuSim:_randvec!, _randcos2, _randcos3
 """
 Helper function that returns the bin_centers, counts, errs and expected values in each bins from the desired zenith angle distribution.
 """
-function test_zenangle_dist(dist::Function, expected::Function, l_bound::Real, u_bound::Real, n::Int=35000)
+function testzenangledist(dist::Function, expected::Function, l_bound::Real, u_bound::Real, n::Int=35000)
     vals = zeros(n)
     _randvec!(dist, vals)
     bin_edges = collect(range(l_bound, u_bound, length=30))
@@ -33,10 +33,10 @@ end
 # %%
 # Test drawing from a custom distribution
 expected_f = x -> @. abs(3cos(x)^2 * sin(x))
-(_, counts, errs, expected) = test_zenangle_dist(_randcos2, expected_f, π / 2, π)
+(_, counts, errs, expected) = testzenangledist(_randcos2, expected_f, π / 2, π)
 @test all(counts - 3.5errs <= expected <= counts + 3.5errs)
 expected_f = x -> @. abs(4cos(x)^3 * sin(x))
-(_, counts, errs, expected) = test_zenangle_dist(_randcos3, expected_f, π / 2, π)
+(_, counts, errs, expected) = testzenangledist(_randcos3, expected_f, π / 2, π)
 @test all(counts - 3.5errs <= expected <= counts + 3.5errs)
 
 end # module

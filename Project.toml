@@ -5,11 +5,10 @@ version = "0.2.0"
 
 [deps]
 BangBang = "198e06fe-97b7-11e9-32a5-e1d131e6ad66"
-Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 FLoops = "cc61a311-1640-44b5-9fba-1b764f453329"
-Folds = "41a02a25-b8f0-4f67-bc48-60067656b558"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MicroCollections = "128add7d-3638-4c79-886c-908ea0c25c34"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"

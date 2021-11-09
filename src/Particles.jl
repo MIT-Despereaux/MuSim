@@ -6,6 +6,10 @@ using Random
 using StaticArrays
 using QuadGK
 using Roots
+using JLD2
+
+CACHE_DIR = joinpath(dirname(@__FILE__), "cache")
+mkpath(CACHE_DIR)
 
 """
 A mutable ray object (just a line) that could go through multiple LabObjects.
@@ -56,13 +60,23 @@ function _randvec!(dist::Function, v::Vector{Float64})
     return nothing
 end
 
-
+μ_dist_cache_fname = "mu_spawn_dist"
+μ_dist_cache_file = joinpath(CACHE_DIR, μ_dist_cache_fname * ".jld2")
+μ_dist_cache = Float64[]
+if !isfile(μ_dist_cache_file)
+    save(μ_dist_cache_file, μ_dist_cache_fname, μ_dist_cache)
+else
+    println("Loading cache...")
+    μ_dist_cache = load(μ_dist_cache_file, μ_dist_cache_fname)
+end
 """
 Generates the muon energy given its ray angle.
 Note currently the energy distribution is completely independent of the angle distribution.
 """
-function μenergy!(θ::Real; cache=nothing)
-    return unisampler!(x -> μpdf(x, θ=π - θ), low_bound=1.0, upp_bound=100, cache=cache)
+function μenergy!(θ::Real)
+    sample = unisampler!(x -> μpdf(x, θ=π - θ), low_bound=1.0, upp_bound=100, cache=μ_dist_cache)
+    save(μ_dist_cache_file, μ_dist_cache_fname, μ_dist_cache)
+    return sample
 end
 
 
