@@ -34,7 +34,6 @@ end
 # Test drawing from a custom distribution
 expected_f = x -> @. abs(3cos(x)^2 * sin(x))
 (_, counts, errs, expected) = test_zenangle_dist(_randcos2, expected_f, π / 2, π)
-println(counts)
 @test all(counts - 3.5errs <= expected <= counts + 3.5errs)
 expected_f = x -> @. abs(4cos(x)^3 * sin(x))
 (_, counts, errs, expected) = test_zenangle_dist(_randcos3, expected_f, π / 2, π)
