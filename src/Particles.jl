@@ -47,12 +47,13 @@ Generates the uniform distribution on the sphere for variable θ. f(θ) = sin(θ
 _randsin() = acos(1 - 2rand())
 
 """
-Returns a vector with the specified distribution function
+Returns a vector with the specified distribution function (1d)
 """
-function _rand_vec!(dist::Function, v::Vector)
+function _randvec!(dist::Function, v::Vector{Float64})
     for i in 1:length(v)
         v[i] = dist()
     end
+    return nothing
 end
 
 
@@ -61,7 +62,7 @@ Generates the muon energy given its ray angle.
 Note currently the energy distribution is completely independent of the angle distribution.
 """
 function μenergy!(θ::Real; cache=nothing)
-    return unisampler!(x -> μpdf(x, θ=π-θ), low_bound=1.0, upp_bound=100, cache=cache)
+    return unisampler!(x -> μpdf(x, θ=π - θ), low_bound=1.0, upp_bound=100, cache=cache)
 end
 
 
@@ -72,7 +73,7 @@ See https://www.worldscientific.com/doi/abs/10.1142/S0217751X18501750.
 function μpdf(E::Real; θ=0, E₀=4.29, ϵ=854, n=3.0, Rd_ratio=174)
     # Parameter units: E₀ [GeV], ϵ [GeV]
     D = √(Rd_ratio^2 * cos(θ)^2 + 2Rd_ratio + 1) - Rd_ratio * cos(θ)
-    return (E₀ + E)^(-n) * (1 + E/ϵ)^(-1) * D
+    return (E₀ + E)^(-n) * (1 + E / ϵ)^(-1) * D
 end
 
 

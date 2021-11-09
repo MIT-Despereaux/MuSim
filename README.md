@@ -1,4 +1,4 @@
-# Ray Tracing
+# MuSim
 This folder contains a package for quick muon-detector simulations. 
 
 # Installation for development
@@ -63,6 +63,6 @@ runhemisim(sim_num, detectors, r, (0, 0, 0), ℓ)
 # TODOs:
 - [High Priority] Complete the tests.
 - [Medium Priority] Explore the interface with python.
-- [Low Priority] Construct a multip-dimensional sampler for arbitrary distributions
+- [Medium Priority] Construct a multip-dimensional sampler for arbitrary distributions
     - Motivation: how to efficiently sample an arbitrary multivariate distribution given it's analytical form?
     - We also needs to sample its integrated probability density, for example: sample the energy spectrum of a muon after we know its solid angle.
