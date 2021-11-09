@@ -1,7 +1,7 @@
-module CoincidenceSim
+module MuSim
 
 """
-This small module is for simulating cosmic ray coincidences.
+This small module is for simulating muon interactions with the detectors.
 """
 
 

@@ -48,10 +48,10 @@ Reference: https://github.com/JuliaPy/PyCall.jl
 
 # Usage
 
-To run a simulation, simply add the `CoincidenceSim` package to your Julia root environment (see above) and use it as a normal package.
+To run a simulation, simply add the `MuSim` package to your Julia root environment (see above) and use it as a normal package.
 For example:
 ```julia
-using CoincidenceSim
+using MuSim
 sim_num = Int(1e3)
 r = 0.80
 ℓ = 0.75
