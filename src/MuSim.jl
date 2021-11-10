@@ -12,6 +12,6 @@ include("RayTracing.jl")
 export LabObject, RectBox, Sphere, Cylinder, isthrough!
 
 include("SimUtils.jl")
-export runsim, runhemisim
+export runsim, runhemisim, runhemisimlite
 
 end

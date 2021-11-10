@@ -123,3 +123,46 @@ function runhemisim(n_sim::Int, detectors::Vector{T},
     results = sparse(I, J, trues(length(I)), n_sim, length(detectors))
     return results, crx_pts, ray_dirs
 end
+
+"""
+Runs the simulation a hemispherical generating surface, outputting only the sparse matrix.
+    """
+function runhemisimlite(n_sim::Int, detectors::Vector{T}, 
+    R::Real, center::NTuple{3,Real}, ℓ::Real;
+    exec=ThreadedEx(), θ_range=(π / 2, π), φ_range=(0, 2π)) where {T <: LabObject{<:Real}}
+    @floop exec for i in 1:n_sim
+        # Private mutable variables
+        @init begin
+            crosses = SortedDict{Float64,SVector{3,Float64}}()
+            hit_vec = falses(length(detectors))
+            i_vec = zeros(length(detectors))
+            j_vec = zeros(length(detectors))
+        end
+        # Set the hit_vec to false to prepare for a new ray
+        hit_vec .*= false
+        ray = Ray(R, center, ℓ; θ=θ_range, φ=φ_range)
+        # Loop through each dectector to fill the pre-allocated vectors
+        for (j, d) in enumerate(detectors)
+            hit = isthrough!(ray, d, crosses)
+            if hit
+                i_vec[j] = i
+                j_vec[j] = j
+                hit_vec[j] = hit
+            end
+        end
+        # Hit indices to be filled
+        ii = i_vec[hit_vec]
+        jj = j_vec[hit_vec]
+        # Reduce the accumulators
+        # Note that for threaded executions, the initial values will be
+        # assigned to the variables (e.g. ii) at the end of the loop
+        # This means e.g. ii will be Int[] at some time
+        @reduce() do (I = Int[]; ii), 
+            (J = Int[]; jj)
+            append!(I, ii)
+            append!(J, jj)
+        end
+    end
+    results = sparse(I, J, trues(length(I)), n_sim, length(detectors))
+    return results
+end
