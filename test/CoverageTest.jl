@@ -73,5 +73,46 @@ end
 (_, rates, errs, expected) = testhemisphericalcoverage()
 @test all(rates - 3.5errs <= expected <= rates + 3.5errs)
 
+function testefficientcoverage(n::Int=300000)
+    # Testing partial coverage of the hemisphere to increase efficiency of the simulation
+    # Generate a reference setup
+    r = 1.0
+    ℓ = 0.45
+
+    # Set up the detectors
+    det1 = RectBox(0.05, 0.05, 0.01, position=(0.0, 0.0, 0.0), efficiency=1.0)
+    det2 = RectBox(0.05, 0.05, 0.01, position=(0.25, 0.0, 0.25), efficiency=1.0)
+
+    total_rate = 2pi / 3 * 70 * ℓ^2 # 1 second normalisation    
+
+    detectors = [det1, det2]
+
+    results, _, _ = runhemisim(n, detectors, r, (0, 0, 0), ℓ)
+
+    coin_hits = sum(results[:, 1] .& results[:, 2])
+    coin_hits_err = √coin_hits
+    coin_hits *= total_rate / n
+    coin_hits_err *= total_rate / n
+
+    # println(coin_hits)
+
+    # Efficient simulation
+    θs = deg2rad.((130, 140))
+    φs = deg2rad.((180 - 10, 180 + 10))
+    results, _, _ = runhemisim(n, detectors, r, (0, 0, 0), ℓ; θ_range=θs, φ_range=φs)
+    total_rate = (φs[2] - φs[1]) * abs(1 / 3 * (cos(θs[2])^3 - cos(θs[1])^3)) * 70 * ℓ^2 # 1 second normalisation    
+
+    coin_hits_eff = sum(results[:, 1] .& results[:, 2])
+    coin_hits_eff_err = √coin_hits_eff
+    coin_hits_eff *= total_rate / n
+    coin_hits_eff_err *= total_rate / n
+    
+    # println(coin_hits_eff)
+    
+    @test abs(coin_hits - coin_hits_eff) ≈ 0 atol = √(coin_hits_err^2 + coin_hits_eff_err^2)
+    return nothing
+end
+
+testefficientcoverage()
 
 end

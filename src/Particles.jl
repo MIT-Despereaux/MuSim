@@ -24,14 +24,17 @@ end
 
 
 """
-Returns a random number with pdf: 0 for x ∈ [0, π/2) and Normalized(cos²(x)) ∈ [π/2, π). We use inverse sampling for speed.
+Returns a random number with pdf: Normalized(cos²(x)) ∈ [x_min, x_max). We use inverse sampling for speed.
 !!!Note: sampling on a sphere requires taking into account of the Jacobian sin(θ)dθdφ = dΩ,
 The constraint is within any solid angle dΩ, the random point counts are constant: so ∫f(θ,φ)dΩ = 1 => pdf = f(θ,φ)sin(θ).
 """
-function _randcos2()
+function _randcos2(x_min::Real=π / 2, x_max::Real=π)
+    @assert 0 <= x_min <= x_max <= π
     # Note (-rand)^(1/3) doesn't work; it gives a complex root (not sure why Julia dev does this...)
-    u = cbrt(-rand())
-    return acos(u)
+    N = 1 / 3 * cos(x_min)^3 - 1 / 3 * cos(x_max)^3
+    u = rand() * N
+    res = (1 / 3 * cos(x_min)^3 - u)
+    return acos(cbrt(3 * res))
 end
 
 
@@ -39,9 +42,13 @@ end
 Returns the distribution f(θ) = cos³(θ)sin(θ). The extra cos factor is required for sampling on a horizontal plane with rays coming
 non-vertically (for the angle between the flux vector and norm vector of the surface).
     """
-function _randcos3()
-    u = -rand()^(1 / 4)
-    return acos(u)
+function _randcos3(x_min::Real=π / 2, x_max::Real=π)
+    @assert π / 2 <= x_min <= x_max <= π
+    # For x_min smaller than π/2 cos(x)^4 will not be monotonic which causes trouble
+    N = 1 / 4 * cos(x_min)^4 - 1 / 4 * cos(x_max)^4
+    u = rand() * N
+    res = (1 / 4 * cos(x_min)^4 - u)
+    return acos(-(4 * res)^(1 / 4))
 end
 
 
@@ -49,16 +56,6 @@ end
 Generates the uniform distribution on the sphere for variable θ. f(θ) = sin(θ). Note the range is [0, π).
 """
 _randsin() = acos(1 - 2rand())
-
-"""
-Returns a vector with the specified distribution function (1d)
-"""
-function _randvec!(dist::Function, v::Vector{Float64})
-    for i in 1:length(v)
-        v[i] = dist()
-    end
-    return nothing
-end
 
 μ_dist_cache_fname = "mu_spawn_dist"
 μ_dist_cache_file = joinpath(CACHE_DIR, μ_dist_cache_fname * ".jld2")
@@ -147,13 +144,19 @@ end
 Randomly generate a ray on the upper hemisphere with radius R. The direction is along the normal vector.
 See http://arxiv.org/abs/1912.05462.
 """
-function Ray(R::Real, center::NTuple{3,Real}, side_len::Real; θ=nothing, φ=nothing)
+function Ray(R::Real, center::NTuple{3,Real}, side_len::Real;
+             θ::Union{Nothing,NTuple{2,Real},Real}=nothing, φ::Union{Nothing,NTuple{2,Real},Real}=nothing)
     if θ === nothing
         # Generate by the distribution
         θ = _randcos2()
+    elseif length(θ) == 2
+        θ = _randcos2(θ[1], θ[2])
     end
-        if φ === nothing
+    if φ === nothing
         φ = rand() * 2pi
+    elseif length(φ) == 2
+        @assert (φ[2] - φ[1]) >= 0
+        φ = rand() * (φ[2] - φ[1]) + φ[1]
     end
     start_θ = pi - θ
     start_φ = φ + pi

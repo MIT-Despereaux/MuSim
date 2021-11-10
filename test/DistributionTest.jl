@@ -10,15 +10,14 @@ using StatsBase
 
 # Submodules
 # Note: Use explicit import when needed
-import MuSim:_randvec!, _randcos2, _randcos3
+import MuSim:_randcos2, _randcos3
 
 # %%
 """
 Helper function that returns the bin_centers, counts, errs and expected values in each bins from the desired zenith angle distribution.
 """
 function testzenangledist(dist::Function, expected::Function, l_bound::Real, u_bound::Real, n::Int=35000)
-    vals = zeros(n)
-    _randvec!(dist, vals)
+    vals = [dist(l_bound, u_bound) for i in 1:n]
     bin_edges = collect(range(l_bound, u_bound, length=30))
     bin_centers = (bin_edges .+ ((bin_edges[2] - bin_edges[1]) / 2))[1:end - 1]
     counts = fit(Histogram, vals, bin_edges).weights

@@ -70,7 +70,8 @@ end
 Runs the simulation a hemispherical generating surface. 
     """
 function runhemisim(n_sim::Int, detectors::Vector{T}, 
-    R::Real, center::NTuple{3,Real}, ℓ::Real; exec=ThreadedEx()) where {T <: LabObject{<:Real}}
+    R::Real, center::NTuple{3,Real}, ℓ::Real;
+    exec=ThreadedEx(), θ_range=(π / 2, π), φ_range=(0, 2π)) where {T <: LabObject{<:Real}}
     @floop exec for i in 1:n_sim
         # Private mutable variables
         @init begin
@@ -83,7 +84,7 @@ function runhemisim(n_sim::Int, detectors::Vector{T},
         end
         # Set the hit_vec to false to prepare for a new ray
         hit_vec .*= false
-        ray = Ray(R, center, ℓ)
+        ray = Ray(R, center, ℓ; θ=θ_range, φ=φ_range)
         # Loop through each dectector to fill the pre-allocated vectors
         for (j, d) in enumerate(detectors)
             hit = isthrough!(ray, d, crosses)
