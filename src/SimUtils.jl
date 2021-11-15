@@ -11,9 +11,9 @@ Note that the detectors are a vector of types being the subtypes of the LabObjec
 The sparse boolean array is stored with dimension (n_sim × n_detector).
 The information for each hit event is stored in dictionary for each detector.
     """
-function runsim(n_sim::Int, detectors::Vector{T}, 
-    max_x::Real, center::NTuple{3,Real}; exec=ThreadedEx()) where {T <: LabObject{<:Real}}
-    @floop exec for i in 1:n_sim
+function runsim(n_sim::Int, detectors::Vector{T},
+    max_x::Real, center::NTuple{3,Real}; exec = ThreadedEx()) where {T<:LabObject{<:Real}}
+    @floop exec for i = 1:n_sim
         # Private mutable variables
         @init begin
             crosses = SortedDict{Float64,SVector{3,Float64}}()
@@ -47,10 +47,10 @@ function runsim(n_sim::Int, detectors::Vector{T},
         # Note that for threaded executions, the initial values will be
         # assigned to the variables (e.g. ii) at the end of the loop
         # This means e.g. ii will be Int[] at some time
-        @reduce() do (I = Int[]; ii), 
-            (J = Int[]; jj), 
-            (crx_pts = [Dict{Int,Matrix{Float64}}() for i in 1:length(detectors)]; crx), 
-            (ray_dirs = [Dict{Int,Vector{Float64}}() for i in 1:length(detectors)]; dir)
+        @reduce() do (I = Int[]; ii),
+        (J = Int[]; jj),
+        (crx_pts = [Dict{Int,Matrix{Float64}}() for i = 1:length(detectors)]; crx),
+        (ray_dirs = [Dict{Int,Vector{Float64}}() for i = 1:length(detectors)]; dir)
             append!(I, ii)
             append!(J, jj)
             for (j, c) in enumerate(crx)
@@ -69,10 +69,10 @@ end
 """
 Runs the simulation a hemispherical generating surface. 
     """
-function runhemisim(n_sim::Int, detectors::Vector{T}, 
+function runhemisim(n_sim::Int, detectors::Vector{T},
     R::Real, center::NTuple{3,Real}, ℓ::Real;
-    exec=ThreadedEx(), θ_range=(π / 2, π), φ_range=(0, 2π)) where {T <: LabObject{<:Real}}
-    @floop exec for i in 1:n_sim
+    exec = ThreadedEx(), θ_range = (π / 2, π), φ_range = (0, 2π)) where {T<:LabObject{<:Real}}
+    @floop exec for i = 1:n_sim
         # Private mutable variables
         @init begin
             crosses = SortedDict{Float64,SVector{3,Float64}}()
@@ -84,7 +84,7 @@ function runhemisim(n_sim::Int, detectors::Vector{T},
         end
         # Set the hit_vec to false to prepare for a new ray
         hit_vec .*= false
-        ray = Ray(R, center, ℓ; θ=θ_range, φ=φ_range)
+        ray = Ray(R, center, ℓ; θ = θ_range, φ = φ_range)
         # Loop through each dectector to fill the pre-allocated vectors
         for (j, d) in enumerate(detectors)
             hit = isthrough!(ray, d, crosses)
@@ -106,10 +106,10 @@ function runhemisim(n_sim::Int, detectors::Vector{T},
         # Note that for threaded executions, the initial values will be
         # assigned to the variables (e.g. ii) at the end of the loop
         # This means e.g. ii will be Int[] at some time
-        @reduce() do (I = Int[]; ii), 
-            (J = Int[]; jj), 
-            (crx_pts = [Dict{Int,Matrix{Float64}}() for i in 1:length(detectors)]; crx), 
-            (ray_dirs = [Dict{Int,Vector{Float64}}() for i in 1:length(detectors)]; dir)
+        @reduce() do (I = Int[]; ii),
+        (J = Int[]; jj),
+        (crx_pts = [Dict{Int,Matrix{Float64}}() for i = 1:length(detectors)]; crx),
+        (ray_dirs = [Dict{Int,Vector{Float64}}() for i = 1:length(detectors)]; dir)
             append!(I, ii)
             append!(J, jj)
             for (j, c) in enumerate(crx)
@@ -124,13 +124,14 @@ function runhemisim(n_sim::Int, detectors::Vector{T},
     return results, crx_pts, ray_dirs
 end
 
+
 """
 Runs the simulation a hemispherical generating surface, outputting only the sparse matrix.
     """
-function runhemisimlite(n_sim::Int, detectors::Vector{T}, 
+function runhemisimlite(n_sim::Int, detectors::Vector{T},
     R::Real, center::NTuple{3,Real}, ℓ::Real;
-    exec=ThreadedEx(), θ_range=(π / 2, π), φ_range=(0, 2π)) where {T <: LabObject{<:Real}}
-    @floop exec for i in 1:n_sim
+    exec = ThreadedEx(), θ_range = (π / 2, π), φ_range = (0, 2π)) where {T<:LabObject{<:Real}}
+    @floop exec for i = 1:n_sim
         # Private mutable variables
         @init begin
             crosses = SortedDict{Float64,SVector{3,Float64}}()
@@ -140,7 +141,7 @@ function runhemisimlite(n_sim::Int, detectors::Vector{T},
         end
         # Set the hit_vec to false to prepare for a new ray
         hit_vec .*= false
-        ray = Ray(R, center, ℓ; θ=θ_range, φ=φ_range)
+        ray = Ray(R, center, ℓ; θ = θ_range, φ = φ_range)
         # Loop through each dectector to fill the pre-allocated vectors
         for (j, d) in enumerate(detectors)
             hit = isthrough!(ray, d, crosses)
@@ -148,17 +149,15 @@ function runhemisimlite(n_sim::Int, detectors::Vector{T},
                 i_vec[j] = i
                 j_vec[j] = j
                 hit_vec[j] = hit
+                empty!(crosses)
             end
         end
         # Hit indices to be filled
         ii = i_vec[hit_vec]
         jj = j_vec[hit_vec]
         # Reduce the accumulators
-        # Note that for threaded executions, the initial values will be
-        # assigned to the variables (e.g. ii) at the end of the loop
-        # This means e.g. ii will be Int[] at some time
-        @reduce() do (I = Int[]; ii), 
-            (J = Int[]; jj)
+        @reduce() do (I = Int[]; ii),
+        (J = Int[]; jj)
             append!(I, ii)
             append!(J, jj)
         end
