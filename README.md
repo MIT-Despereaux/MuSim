@@ -37,7 +37,7 @@ if Base.find_package("PyCall") === nothing
         Pkg.build("PyCall")
     end
     rm(file_name)
-else
+end
 ```
 
 You would then have the `PyCall` package installed under your root environment.
