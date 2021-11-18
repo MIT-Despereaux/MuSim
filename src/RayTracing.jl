@@ -1,4 +1,4 @@
-### This script stores functions related to ray tracing
+### This part stores functions related to ray tracing
 
 import Base: +, -
 using Random

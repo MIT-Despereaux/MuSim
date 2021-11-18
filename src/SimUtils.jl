@@ -1,4 +1,4 @@
-### This script contains functions used for simulations
+### This part contains functions used for simulations
 
 using FLoops
 using SparseArrays

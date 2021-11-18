@@ -1,4 +1,4 @@
-### This script stores properties of the generated particles and their interactions.
+### This part stores properties of the generated particles and their interactions.
 
 import Base.@kwdef
 using LinearAlgebra
