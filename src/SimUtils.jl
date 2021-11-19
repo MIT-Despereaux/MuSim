@@ -68,10 +68,16 @@ end
 
 """
 Runs the simulation a hemispherical generating surface. 
+Optional parameters θ_range and φ_range denotes the range of solid angles
+for the Rays to spawn. The solid angle vector extends from the center of
+the hemisphere to its surface. 
+If not provided, the angles default to full 2π coverage.
     """
 function runhemisim(n_sim::Int, detectors::Vector{T},
     R::Real, center::NTuple{3,Real}, ℓ::Real;
-    exec = ThreadedEx(), θ_range = (π / 2, π), φ_range = (0, 2π)) where {T<:LabObject{<:Real}}
+    exec = ThreadedEx(), θ_range = (0, π / 2), φ_range = (0, 2π)) where {T<:LabObject{<:Real}}
+    θs = (π - θ_range[2], π - θ_range[1])
+    φs = π .+ φ_range
     @floop exec for i = 1:n_sim
         # Private mutable variables
         @init begin
@@ -84,7 +90,7 @@ function runhemisim(n_sim::Int, detectors::Vector{T},
         end
         # Set the hit_vec to false to prepare for a new ray
         hit_vec .*= false
-        ray = Ray(R, center, ℓ; θ = θ_range, φ = φ_range)
+        ray = Ray(R, center, ℓ; θ = θs, φ = φs)
         # Loop through each dectector to fill the pre-allocated vectors
         for (j, d) in enumerate(detectors)
             hit = isthrough!(ray, d, crosses)
@@ -126,11 +132,13 @@ end
 
 
 """
-Runs the simulation a hemispherical generating surface, outputting only the sparse matrix.
+Runs the simulation with a hemispherical generating surface, outputting only the sparse matrix.
     """
 function runhemisimlite(n_sim::Int, detectors::Vector{T},
     R::Real, center::NTuple{3,Real}, ℓ::Real;
-    exec = ThreadedEx(), θ_range = (π / 2, π), φ_range = (0, 2π)) where {T<:LabObject{<:Real}}
+    exec = ThreadedEx(), θ_range = (0, π / 2), φ_range = (0, 2π)) where {T<:LabObject{<:Real}}
+    θs = (π - θ_range[2], π - θ_range[1])
+    φs = π .+ φ_range
     @floop exec for i = 1:n_sim
         # Private mutable variables
         @init begin
@@ -141,7 +149,7 @@ function runhemisimlite(n_sim::Int, detectors::Vector{T},
         end
         # Set the hit_vec to false to prepare for a new ray
         hit_vec .*= false
-        ray = Ray(R, center, ℓ; θ = θ_range, φ = φ_range)
+        ray = Ray(R, center, ℓ; θ = θs, φ = φs)
         # Loop through each dectector to fill the pre-allocated vectors
         for (j, d) in enumerate(detectors)
             hit = isthrough!(ray, d, crosses)
