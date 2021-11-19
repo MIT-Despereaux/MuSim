@@ -69,7 +69,8 @@ runhemisim(sim_num, detectors, r, (0, 0, 0), ℓ)
 
 # Python Interface
 Since most analyses will be run in python, calling this package from python is documented below.
-
+A quick way is to modify and run the `simulations.jl` file in the `./tut` directory and take the saved `.pkl` files.
+Calling julia directly from python is [Work in Progress...]
 
 # TODOs:
 - [x] Complete writing the tests.
