@@ -83,7 +83,7 @@ function testefficientcoverage(n::Int = 300000)
 
     # Set up the detectors
     det1 = RectBox("A", 0.05, 0.05, 0.01, position = (0.0, 0.0, 0.0), efficiency = 1.0)
-    det2 = RectBox("B", 0.05, 0.05, 0.01, position = (0.25, 0.0, 0.25), efficiency = 1.0)
+    det2 = RectBox("B", 0.05, 0.05, 0.01, position = (0.25, 0.0, 0.25 * sqrt(3.0)), efficiency = 1.0)
 
     total_rate = 2pi / 3 * I₀ * ℓ^2 # 1 second normalisation    
 
@@ -99,7 +99,7 @@ function testefficientcoverage(n::Int = 300000)
     # println(coin_hits)
 
     # Efficient simulation
-    θs = deg2rad.((42, 48))
+    θs = deg2rad.((55, 65))
     φs = deg2rad.((-10, 10))
     results, _, _ = runhemisim(n, detectors, r, (0, 0, 0), ℓ; θ_range = θs, φ_range = φs)
     total_rate = (φs[2] - φs[1]) * abs(1 / 3 * (cos(θs[2])^3 - cos(θs[1])^3)) * I₀ * ℓ^2 # 1 second normalisation    
