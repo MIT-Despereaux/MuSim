@@ -62,7 +62,7 @@ using MuSim
 sim_num = Int(1e3)
 r = 0.80
 ℓ = 0.75
-det1 = RectBox(0.01, 0.05, 0.05, position=(0, 0, 0), orientation=deg2rad.((0, 0)), efficiency=0.98, material="POP Doped Polystyrene")
+det1 = RectBox("Name", 0.01, 0.05, 0.05, position=(0, 0, 0), orientation=deg2rad.((0, 0)), efficiency=0.98, material="POP Doped Polystyrene")
 detectors = [det1]
 runhemisim(sim_num, detectors, r, (0, 0, 0), ℓ)
 ```

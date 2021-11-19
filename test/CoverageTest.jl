@@ -26,7 +26,7 @@ function testplanarcoverage(n::Int = 300000)
 
     total_rate = pi / 2 * I₀ * (2x_bound)^2 # 1 second normalisation
 
-    detectors = [RectBox(0.05, 0.05, 0.001, position = (0.0, 0.0, z), efficiency = 1.0) for z in z_pos]
+    detectors = [RectBox("A", 0.05, 0.05, 0.001, position = (0.0, 0.0, z), efficiency = 1.0) for z in z_pos]
 
     println("--- Planar simulation started ---")
     results, _, _ = runsim(n, detectors, x_bound, (0, 0, 0))
@@ -52,7 +52,7 @@ function testhemisphericalcoverage(n::Int = 300000)
 
     total_rate = 2pi / 3 * I₀ * ℓ^2 # 1 second normalisation    
 
-    detectors = [RectBox(0.05, 0.05, 0.001, position = (0.0, 0.0, z), efficiency = 1.0) for z in z_pos]
+    detectors = [RectBox("A", 0.05, 0.05, 0.001, position = (0.0, 0.0, z), efficiency = 1.0) for z in z_pos]
 
     println("--- Hemispherical simulation started ---")
     results, _, _ = runhemisim(n, detectors, r, (0, 0, 0), ℓ)
@@ -82,8 +82,8 @@ function testefficientcoverage(n::Int = 300000)
     ℓ = 0.45
 
     # Set up the detectors
-    det1 = RectBox(0.05, 0.05, 0.01, position = (0.0, 0.0, 0.0), efficiency = 1.0)
-    det2 = RectBox(0.05, 0.05, 0.01, position = (0.25, 0.0, 0.25), efficiency = 1.0)
+    det1 = RectBox("A", 0.05, 0.05, 0.01, position = (0.0, 0.0, 0.0), efficiency = 1.0)
+    det2 = RectBox("B", 0.05, 0.05, 0.01, position = (0.25, 0.0, 0.25), efficiency = 1.0)
 
     total_rate = 2pi / 3 * I₀ * ℓ^2 # 1 second normalisation    
 

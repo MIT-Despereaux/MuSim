@@ -10,7 +10,7 @@ using DataStructures
 
 # Abstract lab object that can be used in coincidence
 # It is NOT possible to subtype a concrete type
-abstract type LabObject{T <: Real} end
+abstract type LabObject{T<:Real} end
 
 
 """
@@ -18,6 +18,7 @@ A "rectangle" box object with 8 corners.
 The box is assumed to be at a position, with ±(Δx | Δy | Δz) / 2 coverage.
 """
 struct RectBox{T} <: LabObject{T}
+    name::String # name
     delta_x::T # x-direction
     delta_y::T # y-direction
     delta_z::T # z-direction
@@ -32,9 +33,11 @@ end
 This is a constructor that promotes type T to U if efficiency is not provided.
 It also sets the default values.
 """
-function RectBox(delta_x::T, delta_y::T, delta_z::T; efficiency::U=1.0, position=(0, 0, 0), orientation=(0, 0), material="Unknown") where {T,U}
+function RectBox(name::String, delta_x::T, delta_y::T, delta_z::T;
+    efficiency::U = 1.0, position = (0, 0, 0),
+    orientation = (0, 0), material = "Unknown") where {T,U}
     args = promote(delta_x, delta_y, delta_z, efficiency)
-    return RectBox(args..., SA_F64[position...], SA_F64[orientation...], material)
+    return RectBox(name, args..., SA_F64[position...], SA_F64[orientation...], material)
 end
 
 
@@ -42,6 +45,7 @@ end
 A "Sphere" object.
 """
 struct Sphere{T} <: LabObject{T}
+    name::String
     radius::T
     efficiency::T
     position::SVector{3,Float64}
@@ -49,9 +53,11 @@ struct Sphere{T} <: LabObject{T}
 end
 
 
-function Sphere(radius::T; efficiency::U=1.0, position=(0, 0, 0), material="Unknown") where {T,U}
+function Sphere(name::String, radius::T;
+    efficiency::U = 1.0, position = (0, 0, 0),
+    material = "Unknown") where {T,U}
     args = promote(radius, efficiency)
-    return Sphere(args..., SA_F64[position...], material)
+    return Sphere(name, args..., SA_F64[position...], material)
 end
 
 
@@ -59,6 +65,7 @@ end
 A cylindrical object with two caps at position ± height/2.
 """
 struct Cylinder{T} <: LabObject{T}
+    name::String
     radius::T
     height::T
     efficiency::T
@@ -68,9 +75,11 @@ struct Cylinder{T} <: LabObject{T}
 end
 
 
-function Cylinder(radius::T, height::T; efficiency::U=1.0, position=(0, 0, 0), orientation=(0, 0), material="Unknown") where {T,U}
+function Cylinder(name::String, radius::T, height::T;
+    efficiency::U = 1.0, position = (0, 0, 0),
+    orientation = (0, 0), material = "Unknown") where {T,U}
     args = promote(radius, height, efficiency)
-    return Cylinder(args..., SA_F64[position...], SA_F64[orientation...], material)
+    return Cylinder(name, args..., SA_F64[position...], SA_F64[orientation...], material)
 end
 
 
@@ -90,7 +99,7 @@ end
 
 
 function (+)(x::LabObject{T}, y::LabObject{T}) where {T}
-    return CombinedObj{T}(LabObject{T}[x,y], Symbol[:+])
+    return CombinedObj{T}(LabObject{T}[x, y], Symbol[:+])
 end
 
 
@@ -102,7 +111,7 @@ end
 
 
 function (-)(x::LabObject{T}, y::LabObject{T}) where {T}
-    return CombinedObj{T}(LabObject{T}[x,y], Symbol[:-])
+    return CombinedObj{T}(LabObject{T}[x, y], Symbol[:-])
 end
 
 
@@ -115,27 +124,30 @@ end
 
 # Print information about the RectBox
 function Base.show(io::IO, box::RectBox)
-    @printf(io, "\tmaterial: %s, with efficiency %.2f", box.material, box.efficiency)
-    @printf(io, "\n\tdimensions: %.2fx%.2fx%.2f cm^3", box.delta_x * 100, box.delta_y * 100, box.delta_z * 100)
-    @printf(io, ", position: (%.0fcm, %.0fcm, %.0fcm)\n", (100 .* box.position)...)
-    @printf(io, ", orientation: (θ: %.2f°, φ: %.2f°)\n", (rad2deg.(box.orientation))...)
+    @printf(io, "name: %s\n", box.name)
+    @printf(io, "material: %s, with efficiency %.2f\n", box.material, box.efficiency)
+    @printf(io, "dimensions: %.2fx%.2fx%.2f cm^3\n", box.delta_x * 100, box.delta_y * 100, box.delta_z * 100)
+    @printf(io, "position: (%.0fcm, %.0fcm, %.0fcm)\n", (100 .* box.position)...)
+    @printf(io, "orientation: (θ: %.2f°, φ: %.2f°)\n", (rad2deg.(box.orientation))...)
 
 end
 
 
 function Base.show(io::IO, s::Sphere)
-    @printf(io, "\tmaterial: %s, with efficiency %.2f", s.material, s.efficiency)
-    @printf(io, "\n\tradius: %.2f cm", s.radius * 100)
-    @printf(io, ", position: (%.0fcm, %.0fcm, %.0fcm)\n", (100 .* s.position)...)
+    @printf(io, "name: %s\n", s.name)
+    @printf(io, "material: %s, with efficiency %.2f\n", s.material, s.efficiency)
+    @printf(io, "radius: %.2f cm\n", s.radius * 100)
+    @printf(io, "position: (%.0fcm, %.0fcm, %.0fcm)\n", (100 .* s.position)...)
 end
 
 
 function Base.show(io::IO, cyl::Cylinder)
-    @printf(io, "\tmaterial: %s, with efficiency %.2f", cyl.material, cyl.efficiency)
-    @printf(io, "\n\tradius: %.2f cm", cyl.radius * 100)
-    @printf(io, "\n\theight: %.2f cm", cyl.height * 100)
-    @printf(io, ", position: (%.0fcm, %.0fcm, %.0fcm)\n", (100 .* cyl.position)...)
-    @printf(io, ", orientation: (θ: %.2f°, φ: %.2f°)\n", (rad2deg.(cyl.orientation))...)
+    @printf(io, "name: %s\n", cyl.name)
+    @printf(io, "material: %s, with efficiency %.2f\n", cyl.material, cyl.efficiency)
+    @printf(io, "radius: %.2f cm\n", cyl.radius * 100)
+    @printf(io, "height: %.2f cm\n", cyl.height * 100)
+    @printf(io, "position: (%.0fcm, %.0fcm, %.0fcm)\n", (100 .* cyl.position)...)
+    @printf(io, "orientation: (θ: %.2f°, φ: %.2f°)\n", (rad2deg.(cyl.orientation))...)
 end
 
 
@@ -152,24 +164,24 @@ function _rotate(v::SVector{3,Float64}, θ₁::Real, φ::Real, θ₂::Real)
     if θ₁ == 0
         mat_θ1 = 1I
     else
-    mat_θ1 = SA_F64[cos(θ₁) 0 sin(θ₁);
-                    0   1   0;
-                    -sin(θ₁) 0 cos(θ₁)]
+        mat_θ1 = SA_F64[cos(θ₁) 0 sin(θ₁)
+            0 1 0
+            -sin(θ₁) 0 cos(θ₁)]
     end
     # Note this is an active rotation around the z+ axis
     if φ == 0
         mat_φ = 1I
     else
-    mat_φ = SA_F64[cos(φ) -sin(φ) 0;
-                    sin(φ) cos(φ) 0;
-                    0   0   1]
+        mat_φ = SA_F64[cos(φ) -sin(φ) 0
+            sin(φ) cos(φ) 0
+            0 0 1]
     end
     if θ₂ == 0
         mat_θ2 = 1I
     else
-    mat_θ2 = SA_F64[cos(θ₂) 0 sin(θ₂);
-                    0   1   0;
-                    -sin(θ₂) 0 cos(θ₂)]
+        mat_θ2 = SA_F64[cos(θ₂) 0 sin(θ₂)
+            0 1 0
+            -sin(θ₂) 0 cos(θ₂)]
     end
     new_v = mat_θ2 * mat_φ * mat_θ1 * v
     return new_v
@@ -199,15 +211,15 @@ function isthrough!(r::Ray, box::RectBox, crosses::SortedDict{Float64,SVector{3,
         r_pos_trans_rot = _rotate(r_pos_trans, 0, -φ, -θ)
 
         # Calculate the cross points with a centered box
-        (t1, c1) = rayplaneint(dir_rot, r_pos_trans_rot, SA_F64[1,0,0], SA_F64[-box.delta_x / 2,0,0])
-        (t2, c2) = rayplaneint(dir_rot, r_pos_trans_rot, SA_F64[1,0,0], SA_F64[+box.delta_x / 2,0,0])
-        (t3, c3) = rayplaneint(dir_rot, r_pos_trans_rot, SA_F64[0,1,0], SA_F64[0,-box.delta_y / 2,0])
-        (t4, c4) = rayplaneint(dir_rot, r_pos_trans_rot, SA_F64[0,1,0], SA_F64[0,+box.delta_y / 2,0])
-        (t5, c5) = rayplaneint(dir_rot, r_pos_trans_rot, SA_F64[0,0,1], SA_F64[0,0,-box.delta_z / 2])
-        (t6, c6) = rayplaneint(dir_rot, r_pos_trans_rot, SA_F64[0,0,1], SA_F64[0,0,+box.delta_z / 2])
+        (t1, c1) = rayplaneint(dir_rot, r_pos_trans_rot, SA_F64[1, 0, 0], SA_F64[-box.delta_x/2, 0, 0])
+        (t2, c2) = rayplaneint(dir_rot, r_pos_trans_rot, SA_F64[1, 0, 0], SA_F64[+box.delta_x/2, 0, 0])
+        (t3, c3) = rayplaneint(dir_rot, r_pos_trans_rot, SA_F64[0, 1, 0], SA_F64[0, -box.delta_y/2, 0])
+        (t4, c4) = rayplaneint(dir_rot, r_pos_trans_rot, SA_F64[0, 1, 0], SA_F64[0, +box.delta_y/2, 0])
+        (t5, c5) = rayplaneint(dir_rot, r_pos_trans_rot, SA_F64[0, 0, 1], SA_F64[0, 0, -box.delta_z/2])
+        (t6, c6) = rayplaneint(dir_rot, r_pos_trans_rot, SA_F64[0, 0, 1], SA_F64[0, 0, +box.delta_z/2])
 
-        (x0, y0, z0) = SA_F64[-box.delta_x / 2,-box.delta_y / 2,-box.delta_z / 2]
-        (x1, y1, z1) = SA_F64[+box.delta_x / 2,+box.delta_y / 2,+box.delta_z / 2]
+        (x0, y0, z0) = SA_F64[-box.delta_x/2, -box.delta_y/2, -box.delta_z/2]
+        (x1, y1, z1) = SA_F64[+box.delta_x/2, +box.delta_y/2, +box.delta_z/2]
 
         # If any of the six points are within the bounded square, then note the cross points
         if c1 !== nothing && (y0 < c1[2] < y1) && (z0 < c1[3] < z1)
@@ -256,7 +268,7 @@ function isthrough!(r::Ray, s::Sphere, crosses::SortedDict{Float64,SVector{3,Flo
         b = 2 * (x0 ⋅ dir)
         c = x0 ⋅ x0 - (s.radius)^2
         Δ = b^2 - 4 * a * c
-        
+
         if Δ <= 0
             return false
         else
@@ -264,7 +276,7 @@ function isthrough!(r::Ray, s::Sphere, crosses::SortedDict{Float64,SVector{3,Flo
             t2 = (-b + √Δ) / (2a)
             push!(crosses, t1 => x0 + Δx + t1 * dir)
             push!(crosses, t2 => x0 + Δx + t2 * dir)
-    end
+        end
         return true
     else
         return false
@@ -319,8 +331,8 @@ function isthrough!(r::Ray, cyl::Cylinder, crosses::SortedDict{Float64,SVector{3
                 raw_c2 = _translate(_rotate(c2, θ, φ, 0), Δx)
                 push!(crosses, t2 => raw_c2)
             end
-            (t3, c3) = rayplaneint(dir_rot, r_pos_trans_rot, SA_F64[0,0,1], SA_F64[0,0,+h / 2])
-            (t4, c4) = rayplaneint(dir_rot, r_pos_trans_rot, SA_F64[0,0,1], SA_F64[0,0,-h / 2])
+            (t3, c3) = rayplaneint(dir_rot, r_pos_trans_rot, SA_F64[0, 0, 1], SA_F64[0, 0, +h/2])
+            (t4, c4) = rayplaneint(dir_rot, r_pos_trans_rot, SA_F64[0, 0, 1], SA_F64[0, 0, -h/2])
             if (c3[1:2] ⋅ c3[1:2] < cyl.radius^2)
                 raw_c3 = _translate(_rotate(c3, θ, φ, 0), Δx)
                 push!(crosses, t3 => raw_c3)
