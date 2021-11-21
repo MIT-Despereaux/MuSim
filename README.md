@@ -91,7 +91,7 @@ the "include" command in julia.
 
 # TODOs:
 - [x] Complete writing the tests.
-- [ ] [Medium Priority] Explore the interface with python.
+- [x] [Medium Priority] Explore the interface with python.
 - [ ] [Medium Priority] Construct a multi-dimensional sampler for arbitrary distributions
     - Motivation: how to efficiently sample an arbitrary multivariate distribution given it's analytical form?
     - We also needs to sample its integrated probability density, for example: sample the energy spectrum of a muon after we know its solid angle.
