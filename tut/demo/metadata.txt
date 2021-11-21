@@ -1,4 +1,4 @@
-Total number of simulations: 50000
+Total number of simulations: 10000
 name: Detector 1
 material: POP Doped Polystyrene, with efficiency 0.98
 dimensions: 1.00x5.00x5.00 cm^3
@@ -17,3 +17,7 @@ dimensions: 1.00x5.00x5.00 cm^3
 position: (-30cm, 0cm, -5cm)
 orientation: (θ: 0.00°, φ: 0.00°)
 --------------------------------------------------
+Simulation Configurations:
+r -> 0.8 
+ℓ -> 0.09 
+sim_num -> 10000 

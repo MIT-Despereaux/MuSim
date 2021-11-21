@@ -5,7 +5,7 @@
 using Plots;
 gr();
 using Plots.PlotMeasures
-default(size = (600, 600), dpi = 100, margin = 3.0mm)
+default(size = (600, 600), dpi = 300, margin = 3.0mm)
 println("Default style set.")
 
 # Set up output directory for the simulation
@@ -25,31 +25,40 @@ I₀ = 57.0 # in Hz m⁻² Sr⁻¹
 b₀ = 0.635 # in Hz
 
 # %%
+# Construct a simulation configuration vector, each entry being a dictionary [variable name -> value]
+sim_configs = Dict{String,Real}[]
 # Use hemispherical generation for efficiency
-# Total number of simulations
-sim_num = Int(5e4)
-# The radius of the hemisphere in [m]
-r = 0.80
 # The list of tangent plane length for ray generation to scan over
-ℓ_list = [x for x = 0.01:0.02:0.10]
+for ℓ = 0.01:0.02:0.10
+    # Total number of simulations
+    config = Dict{String,Real}("sim_num" => Int(1e4))
+    # The radius of the hemisphere in [m]
+    config["r"] = 0.8
+    config["ℓ"] = ℓ
+    push!(sim_configs, config)
+end
 
 """
 Runs the simulation in given configurations. It scans over the ℓ parameter
-in the given list. The output are vectors of simulation results.
+in the given list (provided in sim_configs). 
+The output are vectors of simulation results.
 """
-function runexp(sim_num, detectors, r, ℓ_list; θs = deg2rad.((0, 90)), φs = deg2rad.((0, 360)))
+function runexp(detectors, sim_configs; θs = deg2rad.((0, 90)), φs = deg2rad.((0, 360)))
     # Run the simulation using the setup and return raw results
     # Print number of threads
-    @printf("Number of rays: %.1e, threads: %d\n", sim_num, Threads.nthreads())
+    @printf("Total threads: %d\n", Threads.nthreads())
 
     # Initilize the result vectors
     # Each entry in the vector is a full simulation output
-    results = Vector{Any}(undef, length(ℓ_list))
+    results = Vector{Any}(undef, length(sim_configs))
     crx_pts = similar(results)
     ray_dirs = similar(results)
 
-    for (i, ℓ) in enumerate(ℓ_list)
-        println("\n--- Simulation ℓ#$i, ℓ=$ℓ r=$r started ---")
+    for (i, config) in enumerate(sim_configs)
+        ℓ = config["ℓ"]
+        r = config["r"]
+        sim_num = config["sim_num"]
+        println("\n--- Simulation events $sim_num, ℓ#$i, ℓ=$ℓ r=$r started ---")
         # results: size(sim_num, detectors) sparse matrix with trues and falses.
         # crx_pts: size(detectors) vector of dictionary with [event → two cross points of this event] as [key → value] pairs.
         # ray_dirs: size(detectors) vector of dictionary with [event → (θ, φ) of the muon direction].
@@ -85,7 +94,7 @@ for d in detectors
     println(d)
 end
 
-results, crx_pts, ray_dirs = runexp(sim_num, detectors, r, ℓ_list; θs = θs, φs = φs);
+results, crx_pts, ray_dirs = runexp(detectors, sim_configs; θs = θs, φs = φs);
 
 # %%
 # Visualization
@@ -129,20 +138,21 @@ end
 
 """
 This function plots the rates for some selected detector combinations 
-with scanned ℓ_list as the x-axis. If the length of the list is 1 then abort
-and return nothing.
+with scanned ℓ_list as the x-axis. If the length of the list is 1 then abort and return nothing.
 The combinations should be in a list in ["1", "12", "14", ...] format, 
 with the numbers denoting the detector columns.
+Assumes that the given sim_configs contains only scan over ℓ.
 Returns the plot for further manipulation.
 """
-function plotratestab(results, ℓ_list, combinations, θs, φs)
+function plotratestab(results, sim_configs, combinations, θs, φs)
     # Plot the detector rate against the simulation configs
-    if length(ℓ_list) == 1
-        @warn "ℓ_list length is 1, abort plotting..."
+    if length(sim_configs) == 1
+        @warn "sim_configs length is 1, abort plotting..."
         return nothing
     end
-    rates = zeros(length(ℓ_list), length(combinations))
-    for (i, ℓ) in enumerate(ℓ_list)
+    rates = zeros(length(sim_configs), length(combinations))
+    for (i, config) in enumerate(sim_configs)
+        ℓ = config["ℓ"]
         # Normalize the flux
         total_rate = (φs[2] - φs[1]) * abs(1 / 3 * (cos(θs[2])^3 - cos(θs[1])^3)) * I₀ * ℓ^2 # 1 second normalisation
         res = results[i]
@@ -165,7 +175,7 @@ function plotratestab(results, ℓ_list, combinations, θs, φs)
 
     pal = palette([:purple, :green], length(combinations))
     p1 = Plots.plot(palette = pal)
-    plot!(ℓ_list, rates, label = hcat(["Comb. $c" for c in combinations]...), legend = :topleft)
+    plot!([c["ℓ"] for c in sim_configs], rates, label = hcat(["Comb. $c" for c in combinations]...), legend = :topleft)
     xlabel!("Tangent generation plane side length [m]")
     ylabel!("Muon rate [s⁻¹]")
     title!("Vertical Muon Rate = $I₀ [m⁻² s⁻¹ Sr⁻¹]")
@@ -174,14 +184,15 @@ function plotratestab(results, ℓ_list, combinations, θs, φs)
 end
 
 # Picks out the desired simulation result from the scanned list
-i = length(ℓ_list)
+i = length(sim_configs)
 res = results[i]
 crx = crx_pts[i]
 dirs = ray_dirs[i]
+config = sim_configs[i]
 # Plot the combinations
 combinations = ["12", "13", "23"]
 p1 = plotcrxpts(res, crx, detectors)
-p2 = plotratestab(results, ℓ_list, combinations, θs, φs)
+p2 = plotratestab(results, sim_configs, combinations, θs, φs)
 
 # %%
 # Save simulation results as .pkl files (pandas DataFrame)
@@ -192,7 +203,7 @@ Overwrite controls whether to overwrite existing data.
 The function reads the files on disk if they are already there and returns
 a dictionary containing the DataFrames.
 """
-function expio(res, crx, dirs, detectors; overwrite = false)
+function expio(res, crx, dirs, config, detectors; overwrite = false)
     # Construct the metadata
     metadata = "Total number of simulations: $(size(res)[1])\n"
     detector_names = String[]
@@ -202,8 +213,11 @@ function expio(res, crx, dirs, detectors; overwrite = false)
         metadata *= "\n"
         push!(detector_names, d.name)
     end
+    metadata *= "Simulation Configurations:\n"
+    for (k, v) in config
+        metadata *= "$k -> $v \n"
+    end
     println(metadata)
-    # println(detector_names)
 
     # Construct the DataFrames and sort in place
     df_res = pd.DataFrame(res, columns = detector_names, dtype = pd.SparseDtype("bool", false))
@@ -237,7 +251,7 @@ function expio(res, crx, dirs, detectors; overwrite = false)
 end
 
 # %%
-sim_res = expio(res, crx, dirs, detectors; overwrite = true)
+sim_res = expio(res, crx, dirs, config, detectors; overwrite = true)
 
 # %%
 # This demo shows what saved data looks like
@@ -252,3 +266,5 @@ p3 = Plots.histogram(rad2deg.(vals .- π / 2), bin = 20)
 xlabel!("θ of the incident ray")
 ylabel!("Counts")
 savefig(p3, joinpath(OUT_DIR, "Demo_Histogram.pdf"))
+
+return sim_res

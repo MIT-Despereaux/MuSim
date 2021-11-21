@@ -70,7 +70,24 @@ runhemisim(sim_num, detectors, r, (0, 0, 0), ℓ)
 # Python Interface
 Since most analyses will be run in python, calling this package from python is documented below.
 A quick way is to modify and run the `simulations.jl` file in the `./tut` directory and take the saved `.pkl` files.
-Calling julia directly from python is [Work in Progress...]
+Calling julia directly from python is (non-trivially) straightforward (:sweat_smile:):
+
+Steps:
+1. Install [PyJulia](https://github.com/JuliaPy/pyjulia) from `pip`:
+```sh
+# !Activate the correct environment first
+conda activate prod;
+pip install julia;
+python -c "import julia; julia.install()";
+```
+2. Run the python scripts using `python-jl` executable instead of the regular `python` executable. For example:
+```sh
+python-jl ./tut/sims.py
+```
+
+The file `sims.py` in the `./tut/` directory shows how to setup and run a simulation and get the results back in python.
+For long julia code blocks, it is recommended to write it in a separate `.jl` script and call the script directly using
+the "include" command in julia.
 
 # TODOs:
 - [x] Complete writing the tests.
