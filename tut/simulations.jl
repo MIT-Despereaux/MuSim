@@ -1,12 +1,8 @@
 # This is a generic script for simulating and saving results of a bunch of detectors.
 # Actual analysis (such as coincidence rates, etc) are done by reading the resultant pkl files.
 
-# Set up graphic outputs (plotting backend = GR)
-using Plots;
-gr();
-using Plots.PlotMeasures
-default(size = (600, 600), dpi = 300, margin = 3.0mm)
-println("Default style set.")
+include(joinpath(dirname(@__FILE__), "../test/testutils.jl"))
+initplots()
 
 # Set up output directory for the simulation
 OUT_DIR = abspath(joinpath(dirname(@__FILE__), "./demo"));
