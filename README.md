@@ -2,7 +2,7 @@
 This folder contains a package for quick muon-detector simulations. 
 
 # Installation for development
-Add the current package to Julia general envronment for dev, it will be recorded in the general Manifest file:
+Add the current package to Julia general environment for dev, it will be recorded in the general Manifest file:
 ```julia
 ]dev /path/to/package/
 ```

@@ -76,7 +76,7 @@ If not provided, the angles default to full 2π coverage.
 function runhemisim(n_sim::Int, detectors::Vector{T},
     R::Real, center::NTuple{3,Real}, ℓ::Real;
     exec = ThreadedEx(), θ_range = (0, π / 2), φ_range = (0, 2π)) where {T<:LabObject{<:Real}}
-    θs = π / 2 .+ θ_range
+    θs = (π - θ_range[2], π - θ_range[1])
     φs = π .+ φ_range
     @floop exec for i = 1:n_sim
         # Private mutable variables
@@ -137,7 +137,7 @@ Runs the simulation with a hemispherical generating surface, outputting only the
 function runhemisimlite(n_sim::Int, detectors::Vector{T},
     R::Real, center::NTuple{3,Real}, ℓ::Real;
     exec = ThreadedEx(), θ_range = (0, π / 2), φ_range = (0, 2π)) where {T<:LabObject{<:Real}}
-    θs = π / 2 .+ θ_range
+    θs = (π - θ_range[2], π - θ_range[1])
     φs = π .+ φ_range
     @floop exec for i = 1:n_sim
         # Private mutable variables
