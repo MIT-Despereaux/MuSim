@@ -178,7 +178,7 @@ Returns the direction vector in Cartesian coordinates.
 function raydir(r::Ray)::SVector{3,Float64}
     θ = r.azimuth_agl
     φ = r.polar_agl
-    return SA_F64[sin(θ)*cos(φ), sin(θ)*sin(φ), cos(θ)]
+    return _unitsph2cart(θ, φ)
 end
 
 

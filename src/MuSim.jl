@@ -9,7 +9,7 @@ include("Particles.jl")
 export Ray, raydir, rayplaneint, μenergy!
 
 include("RayTracing.jl")
-export LabObject, RectBox, Sphere, Cylinder, isthrough!
+export LabObject, RectBox, Sphere, Cylinder, isthrough!, objorient
 
 include("SimUtils.jl")
 export runsim, runhemisim, runhemisimlite

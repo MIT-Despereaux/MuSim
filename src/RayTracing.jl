@@ -17,7 +17,7 @@ abstract type LabObject{T<:Real} end
 A "rectangle" box object with 8 corners.
 The box is assumed to be at a position, with ±(Δx | Δy | Δz) / 2 coverage.
 """
-struct RectBox{T} <: LabObject{T}
+mutable struct RectBox{T} <: LabObject{T}
     name::String # name
     delta_x::T # x-direction
     delta_y::T # y-direction
@@ -44,7 +44,7 @@ end
 """
 A "Sphere" object.
 """
-struct Sphere{T} <: LabObject{T}
+mutable struct Sphere{T} <: LabObject{T}
     name::String
     radius::T
     efficiency::T
@@ -64,7 +64,7 @@ end
 """
 A cylindrical object with two caps at position ± height/2.
 """
-struct Cylinder{T} <: LabObject{T}
+mutable struct Cylinder{T} <: LabObject{T}
     name::String
     radius::T
     height::T
@@ -88,7 +88,7 @@ Combined objects that could take on addition or subtraction of different shapes.
 Used for exotic detector shapes.
 NOTE: WORK IN PROGRSS...
 """
-struct CombinedObj{T} <: LabObject{T}
+mutable struct CombinedObj{T} <: LabObject{T}
     dets::Vector{LabObject{T}}
     ops::Vector{Symbol} # The list of operations to be performed between detectors. Only "+" and "-" are supported. 
     function CombinedObj{T}(dets::Vector{LabObject{T}}, ops::Vector{Symbol}) where {T}
@@ -148,6 +148,25 @@ function Base.show(io::IO, cyl::Cylinder)
     @printf(io, "height: %.2f cm\n", cyl.height * 100)
     @printf(io, "position: (%.0fcm, %.0fcm, %.0fcm)\n", (100 .* cyl.position)...)
     @printf(io, "orientation: (θ: %.2f°, φ: %.2f°)\n", (rad2deg.(cyl.orientation))...)
+end
+
+
+"""
+Returns object orientation in Cartesian coordinates.
+"""
+function objorient(o::LabObject{T})::SVector{3,Float64} where {T}
+    return _unitsph2cart(o.orientation...)
+end
+
+
+function _unitsph2cart(θ::Real, φ::Real)::SVector{3,Float64}
+    return SA_F64[sin(θ)*cos(φ), sin(θ)*sin(φ), cos(θ)]
+end
+
+
+function _cart2unitsph(x::Real, y::Real, z::Real)::SVector{2,Float64}
+    len = √(x^2 + y^2 + z^2)
+    return SA_F64[acos(z / len), atan(y, x)]
 end
 
 
