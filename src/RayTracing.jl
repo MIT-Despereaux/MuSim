@@ -1,6 +1,6 @@
 ### This part stores functions related to ray tracing
 
-import Base: +, -
+import Base: +, -, ==, show
 using Random
 using LinearAlgebra
 using Printf
@@ -122,8 +122,51 @@ function (-)(x::CombinedObj{T}, y::LabObject{T}) where {T}
 end
 
 
-# Print information about the RectBox
-function Base.show(io::IO, box::RectBox)
+# For comparison, we need to implement Base.hash
+# only when the object is going to be used as Dict keys.
+# function hash(o::LabObject{T}) where {T}
+#     return nothing
+# end
+
+# Generic comparison of different LabObjects.
+function ==(x::RectBox, y::RectBox)::Bool
+    all_prop_names_x = propertynames(x)
+    all_prop_names_y = propertynames(y)
+    for (f_x, f_y) in zip(all_prop_names_x, all_prop_names_y)
+        if getproperty(x, f_x) != getproperty(y, f_y)
+            return false
+        end
+    end
+    return true
+end
+
+
+function ==(x::Sphere, y::Sphere)::Bool
+    all_prop_names_x = propertynames(x)
+    all_prop_names_y = propertynames(y)
+    for (f_x, f_y) in zip(all_prop_names_x, all_prop_names_y)
+        if getproperty(x, f_x) != getproperty(y, f_y)
+            return false
+        end
+    end
+    return true
+end
+
+
+function ==(x::Cylinder, y::Cylinder)::Bool
+    all_prop_names_x = propertynames(x)
+    all_prop_names_y = propertynames(y)
+    for (f_x, f_y) in zip(all_prop_names_x, all_prop_names_y)
+        if getproperty(x, f_x) != getproperty(y, f_y)
+            return false
+        end
+    end
+    return true
+end
+
+
+# Print information about the LabObject.
+function show(io::IO, box::RectBox)
     @printf(io, "name: %s\n", box.name)
     @printf(io, "material: %s, with efficiency %.2f\n", box.material, box.efficiency)
     @printf(io, "dimensions: %.2fx%.2fx%.2f cm^3\n", box.delta_x * 100, box.delta_y * 100, box.delta_z * 100)
@@ -133,7 +176,7 @@ function Base.show(io::IO, box::RectBox)
 end
 
 
-function Base.show(io::IO, s::Sphere)
+function show(io::IO, s::Sphere)
     @printf(io, "name: %s\n", s.name)
     @printf(io, "material: %s, with efficiency %.2f\n", s.material, s.efficiency)
     @printf(io, "radius: %.2f cm\n", s.radius * 100)
@@ -141,7 +184,7 @@ function Base.show(io::IO, s::Sphere)
 end
 
 
-function Base.show(io::IO, cyl::Cylinder)
+function show(io::IO, cyl::Cylinder)
     @printf(io, "name: %s\n", cyl.name)
     @printf(io, "material: %s, with efficiency %.2f\n", cyl.material, cyl.efficiency)
     @printf(io, "radius: %.2f cm\n", cyl.radius * 100)

@@ -1,4 +1,4 @@
-### Tests for sampling geometry validations
+### Tests for sampling geometry validations.
 
 module CoverageTest
 

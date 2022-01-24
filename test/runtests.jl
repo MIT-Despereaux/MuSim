@@ -1,5 +1,9 @@
 ### Run tests
 
+println("Testing basic structures...")
+t = @elapsed include("BasicTest.jl")
+println("Time elapsed: $t seconds")
+
 println("Testing distributions...")
 t = @elapsed include("DistributionTest.jl")
 println("Time elapsed: $t seconds")

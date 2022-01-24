@@ -1,4 +1,4 @@
-### Tests for sampling from a distribution
+### Tests for sampling from a distribution.
 
 module DistributionTest
 
