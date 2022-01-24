@@ -1,6 +1,6 @@
 ### This part stores functions related to ray tracing
 
-import Base: +, -, ==, show
+import Base: +, -, ==, hash, show
 using Random
 using LinearAlgebra
 using Printf
@@ -121,47 +121,30 @@ function (-)(x::CombinedObj{T}, y::LabObject{T}) where {T}
     return CombinedObj{T}(x.dets, x.ops)
 end
 
-
-# For comparison, we need to implement Base.hash
-# only when the object is going to be used as Dict keys.
-# function hash(o::LabObject{T}) where {T}
-#     return nothing
-# end
-
-# Generic comparison of different LabObjects.
-function ==(x::RectBox, y::RectBox)::Bool
-    all_prop_names_x = propertynames(x)
-    all_prop_names_y = propertynames(y)
-    for (f_x, f_y) in zip(all_prop_names_x, all_prop_names_y)
-        if getproperty(x, f_x) != getproperty(y, f_y)
-            return false
-        end
+"""
+For comparison, we need to implement Base.hash and Base.:==
+This is also used when hashing a dictionary that contains the object.
+"""
+function hash(o::T, h::UInt) where {T<:LabObject{<:Real}}
+    all_prop_names = propertynames(o)
+    out_hash = h
+    for p in all_prop_names
+        out_hash = hash(getproperty(o, p), out_hash)
     end
-    return true
+    return out_hash
 end
 
 
-function ==(x::Sphere, y::Sphere)::Bool
-    all_prop_names_x = propertynames(x)
-    all_prop_names_y = propertynames(y)
-    for (f_x, f_y) in zip(all_prop_names_x, all_prop_names_y)
-        if getproperty(x, f_x) != getproperty(y, f_y)
-            return false
-        end
-    end
-    return true
+function hash(o::T) where {T<:LabObject{<:Real}}
+    return hash(o, zero(UInt))
 end
 
 
-function ==(x::Cylinder, y::Cylinder)::Bool
-    all_prop_names_x = propertynames(x)
-    all_prop_names_y = propertynames(y)
-    for (f_x, f_y) in zip(all_prop_names_x, all_prop_names_y)
-        if getproperty(x, f_x) != getproperty(y, f_y)
-            return false
-        end
-    end
-    return true
+"""
+Generic comparison of different LabObjects.
+"""
+function ==(x::T, y::T)::Bool where {T<:LabObject{<:Real}}
+    return hash(x) == hash(y)
 end
 
 
