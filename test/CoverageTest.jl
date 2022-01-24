@@ -5,7 +5,13 @@ module CoverageTest
 include(joinpath(dirname(@__FILE__), "testutils.jl"))
 
 using Test
-using MuSim
+# The following code is necessary to fix VSCode julia local module linting
+if isdefined(@__MODULE__, :LanguageServer)
+    include("../src/MuSim.jl")
+    using .MuSim
+else
+    using MuSim
+end
 
 # Submodules
 # import MuSim:_randvec!, _randcos2, _randcos3

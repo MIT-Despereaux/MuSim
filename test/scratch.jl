@@ -1,6 +1,5 @@
 ### Scratches and plots
 
-
 using MuSim
 import MuSim: _randcos2
 

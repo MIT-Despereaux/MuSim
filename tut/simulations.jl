@@ -8,7 +8,14 @@ initplots()
 OUT_DIR = abspath(joinpath(dirname(@__FILE__), "./demo"));
 println("Output directory: $OUT_DIR")
 mkpath(OUT_DIR)
-using MuSim
+
+# The following code is necessary to fix VSCode julia local module linting
+if isdefined(@__MODULE__, :LanguageServer)
+    include("../src/MuSim.jl")
+    using .MuSim
+else
+    using MuSim
+end
 
 # Using pandas from python to save DataFrames to pkl files
 using PyCall
