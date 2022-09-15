@@ -34,8 +34,8 @@ This is a constructor that promotes type T to U if efficiency is not provided.
 It also sets the default values.
 """
 function RectBox(name::String, delta_x::T, delta_y::T, delta_z::T;
-    efficiency::U = 1.0, position = (0, 0, 0),
-    orientation = (0, 0), material = "Unknown") where {T,U}
+    efficiency::U=1.0, position=(0, 0, 0),
+    orientation=(0, 0), material="Unknown") where {T,U}
     args = promote(delta_x, delta_y, delta_z, efficiency)
     return RectBox(name, args..., SA_F64[position...], SA_F64[orientation...], material)
 end
@@ -54,8 +54,8 @@ end
 
 
 function Sphere(name::String, radius::T;
-    efficiency::U = 1.0, position = (0, 0, 0),
-    material = "Unknown") where {T,U}
+    efficiency::U=1.0, position=(0, 0, 0),
+    material="Unknown") where {T,U}
     args = promote(radius, efficiency)
     return Sphere(name, args..., SA_F64[position...], material)
 end
@@ -76,8 +76,8 @@ end
 
 
 function Cylinder(name::String, radius::T, height::T;
-    efficiency::U = 1.0, position = (0, 0, 0),
-    orientation = (0, 0), material = "Unknown") where {T,U}
+    efficiency::U=1.0, position=(0, 0, 0),
+    orientation=(0, 0), material="Unknown") where {T,U}
     args = promote(radius, height, efficiency)
     return Cylinder(name, args..., SA_F64[position...], SA_F64[orientation...], material)
 end

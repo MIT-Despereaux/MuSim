@@ -59,7 +59,6 @@ function testcoverage2_hemisimlite(n::Int=50000)
     θ = π / 4
     box1 = RectBox("A", w, w, 0.001; orientation=(θ, 0))
     box2 = RectBox("B", w, w, 0.001; position=(sin(θ) * d, 0, cos(θ) * d), orientation=(θ, 0))
-    # println("position=($d, 0, $(tan(π / 2 - θ) * d))")
     dets = [box1, box2]
 
     r = d * 2
