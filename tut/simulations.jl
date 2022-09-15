@@ -18,7 +18,7 @@ else
 end
 
 # Using pandas from python to save DataFrames to pkl files
-using PyCall
+using PythonCall
 pd = pyimport("pandas")
 using Printf
 
@@ -46,7 +46,7 @@ Runs the simulation in given configurations. It scans over the ℓ parameter
 in the given list (provided in sim_configs). 
 The output are vectors of simulation results.
 """
-function runexp(detectors, sim_configs; θs = deg2rad.((0, 90)), φs = deg2rad.((0, 360)))
+function runexp(detectors, sim_configs; θs=deg2rad.((0, 90)), φs=deg2rad.((0, 360)))
     # Run the simulation using the setup and return raw results
     # Print number of threads
     @printf("Total threads: %d\n", Threads.nthreads())
@@ -65,7 +65,7 @@ function runexp(detectors, sim_configs; θs = deg2rad.((0, 90)), φs = deg2rad.(
         # results: size(sim_num, detectors) sparse matrix with trues and falses.
         # crx_pts: size(detectors) vector of dictionary with [event → two cross points of this event] as [key → value] pairs.
         # ray_dirs: size(detectors) vector of dictionary with [event → (θ, φ) of the muon direction].
-        results[i], crx_pts[i], ray_dirs[i] = runhemisim(sim_num, detectors, r, (0, 0, 0), ℓ; θ_range = θs, φ_range = φs)
+        results[i], crx_pts[i], ray_dirs[i] = runhemisim(sim_num, detectors, r, (0, 0, 0), ℓ; θ_range=θs, φ_range=φs)
     end
 
     return results, crx_pts, ray_dirs
@@ -81,15 +81,15 @@ dy = 0.0
 θs = deg2rad.((5, 15)) # from 5° to 15°
 φs = deg2rad.((-25, 25)) # ±25°
 
-det1 = RectBox("Detector 1", 0.01, 0.05, 0.05, position = (0.3, dy, dz),
-    orientation = deg2rad.((0, 0)), efficiency = 0.98,
-    material = "POP Doped Polystyrene")
-chip = RectBox("Chip", 350e-6, 0.005, 0.005, position = (0, dy, 0),
-    orientation = deg2rad.((0, 0)), efficiency = 1.0,
-    material = "Unknown")
-det2 = RectBox("Detector 2", 0.01, 0.05, 0.05, position = (-0.3, dy, -dz),
-    orientation = deg2rad.((0, 0)), efficiency = 0.98,
-    material = "POP Doped Polystyrene")
+det1 = RectBox("Detector 1", 0.01, 0.05, 0.05, position=(0.3, dy, dz),
+    orientation=deg2rad.((0, 0)), efficiency=0.98,
+    material="POP Doped Polystyrene")
+chip = RectBox("Chip", 350e-6, 0.005, 0.005, position=(0, dy, 0),
+    orientation=deg2rad.((0, 0)), efficiency=1.0,
+    material="Unknown")
+det2 = RectBox("Detector 2", 0.01, 0.05, 0.05, position=(-0.3, dy, -dz),
+    orientation=deg2rad.((0, 0)), efficiency=0.98,
+    material="POP Doped Polystyrene")
 
 # Put the detectors into a list
 detectors = [det1, chip, det2]
@@ -97,7 +97,7 @@ for d in detectors
     println(d)
 end
 
-results, crx_pts, ray_dirs = runexp(detectors, sim_configs; θs = θs, φs = φs);
+results, crx_pts, ray_dirs = runexp(detectors, sim_configs; θs=θs, φs=φs);
 
 # %%
 # Visualization
@@ -121,20 +121,20 @@ function plotcrxpts(res, crx, detectors)
     end
 
     # Configure palette for the plot
-    pal = cgrad(:matter, length(detectors), categorical = true)
-    p1 = Plots.plot(dpi = 300, size = (1000, 1000), palette = pal)
+    pal = cgrad(:matter, length(detectors), categorical=true)
+    p1 = Plots.plot(dpi=300, size=(1000, 1000), palette=pal)
     for (j, d) in enumerate(detectors)
         pts = all_pts[j]
         # Set the maximum number of points to plot for each detector
         max_pts = min(size(pts)[1], 250)
         scatter!(pts[1:max_pts, 1], pts[1:max_pts, 2], pts[1:max_pts, 3],
-            aspect_ratio = :equal, markersize = 1.5, markeralpha = 0.7,
-            markerstrokewidth = 0.2, label = "Det. $j")
+            aspect_ratio=:equal, markersize=1.5, markeralpha=0.7,
+            markerstrokewidth=0.2, label="Det. $j")
     end
     # Adjust the axes limits
     xaxis!("x", (-0.5, 0.5))
     yaxis!("y", (-0.5, 0.5))
-    plot!(zaxis = ("z", (-0.5, 0.5)))
+    plot!(zaxis=("z", (-0.5, 0.5)))
     savefig(p1, joinpath(OUT_DIR, "Hitpoint_Scatter.png"))
     return p1
 end
@@ -177,8 +177,8 @@ function plotratestab(results, sim_configs, combinations, θs, φs)
     end
 
     pal = palette([:purple, :green], length(combinations))
-    p1 = Plots.plot(palette = pal)
-    plot!([c["ℓ"] for c in sim_configs], rates, label = hcat(["Comb. $c" for c in combinations]...), legend = :topleft)
+    p1 = Plots.plot(palette=pal)
+    plot!([c["ℓ"] for c in sim_configs], rates, label=hcat(["Comb. $c" for c in combinations]...), legend=:topleft)
     xlabel!("Tangent generation plane side length [m]")
     ylabel!("Muon rate [s⁻¹]")
     title!("Vertical Muon Rate = $I₀ [m⁻² s⁻¹ Sr⁻¹]")
@@ -206,7 +206,7 @@ Overwrite controls whether to overwrite existing data.
 The function reads the files on disk if they are already there and returns
 a dictionary containing the DataFrames.
 """
-function expio(res, crx, dirs, config, detectors; overwrite = false)
+function expio(res, crx, dirs, config, detectors; overwrite=false)
     # Construct the metadata
     metadata = "Total number of simulations: $(size(res)[1])\n"
     detector_names = String[]
@@ -223,13 +223,13 @@ function expio(res, crx, dirs, config, detectors; overwrite = false)
     println(metadata)
 
     # Construct the DataFrames and sort in place
-    df_res = pd.DataFrame(res, columns = detector_names, dtype = pd.SparseDtype("bool", false))
+    df_res = pd.DataFrame(res, columns=detector_names, dtype=pd.SparseDtype("bool", false))
 
-    df_crx = pd.DataFrame(crx, index = detector_names, dtype = pd.SparseDtype("object")).transpose()
-    df_crx.sort_index(inplace = true)
+    df_crx = pd.DataFrame(crx, index=detector_names, dtype=pd.SparseDtype("object")).transpose()
+    df_crx.sort_index(inplace=true)
 
-    df_dirs = pd.DataFrame(dirs, index = detector_names, dtype = pd.SparseDtype("object")).transpose()
-    df_dirs.sort_index(inplace = true)
+    df_dirs = pd.DataFrame(dirs, index=detector_names, dtype=pd.SparseDtype("object")).transpose()
+    df_dirs.sort_index(inplace=true)
 
     file_names = ["sim_res", "sim_crx", "sim_dirs"]
     files = [df_res, df_crx, df_dirs]
@@ -254,7 +254,7 @@ function expio(res, crx, dirs, config, detectors; overwrite = false)
 end
 
 # %%
-sim_res = expio(res, crx, dirs, config, detectors; overwrite = true)
+sim_res = expio(res, crx, dirs, config, detectors; overwrite=true)
 
 # %%
 # This demo shows what saved data looks like
@@ -265,7 +265,7 @@ df_mask = df_dirs["Detector 1"].notna().values .& df_dirs["Detector 2"].notna().
 println("Total selected events: $(sum(df_mask))")
 df = df_raw.sparse.to_dense().values[df_mask]
 vals = [df[i][1] for i = 1:length(df)]
-p3 = Plots.histogram(rad2deg.(vals .- π / 2), bin = 20)
+p3 = Plots.histogram(rad2deg.(vals .- π / 2), bin=20)
 xlabel!("θ of the incident ray")
 ylabel!("Counts")
 savefig(p3, joinpath(OUT_DIR, "Demo_Histogram.pdf"))

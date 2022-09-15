@@ -4,12 +4,15 @@ This folder contains a package for quick muon-detector simulations.
 # Installation for development
 Add the current package to Julia general environment for dev, it will be recorded in the general Manifest file:
 ```julia
-]dev /path/to/package/
+using Pkg; Pkg.develop("/path/to/package/")
 ```
 To remove (since this package is local and not registered under the official Julia package repo):
 ```julia
-]rm packagename
+using Pkg; Pkg.rm("PackageName")
 ```
+
+# Python Binding
+Currently this section is under re-assessment for switching to `PythonCall`.
 
 Note: the required packages include `PyCall` which deals with python bindings.
 Its default python executable and environment can be set when installed. 
@@ -54,19 +57,6 @@ the `PyCall` package.
 
 Reference: https://github.com/JuliaPy/PyCall.jl
 
-# Usage
-To run a simulation, simply add the `MuSim` package to your Julia root environment (see above) and use it as a normal package.
-Tutorial files are in the `./tut` directory, but the following gives a very quick example.
-```julia
-using MuSim
-sim_num = Int(1e3)
-r = 0.80
-ℓ = 0.75
-det1 = RectBox("Name", 0.01, 0.05, 0.05, position=(0, 0, 0), orientation=deg2rad.((0, 0)), efficiency=0.98, material="POP Doped Polystyrene")
-detectors = [det1]
-@time runhemisim(sim_num, detectors, r, (0, 0, 0), ℓ)
-```
-
 # Python Interface
 Since most analyses will be run in python, calling this package from python is documented below.
 A quick way is to modify and run the `simulations.jl` file in the `./tut` directory and take the saved `.pkl` files.
@@ -88,6 +78,19 @@ python-jl ./tut/sims.py
 The file `sims.py` in the `./tut/` directory shows how to setup and run a simulation and get the results back in python.
 For long julia code blocks, it is recommended to write it in a separate `.jl` script and call the script directly using
 the "include" command in julia.
+
+# Usage
+To run a simulation, simply add the `MuSim` package to your Julia root environment (see above) and use it as a normal package.
+Tutorial files are in the `./tut` directory, but the following gives a very quick example.
+```julia
+using MuSim
+sim_num = Int(1e3)
+r = 0.80
+ℓ = 0.75
+det1 = RectBox("Name", 0.01, 0.05, 0.05, position=(0, 0, 0), orientation=deg2rad.((0, 0)), efficiency=0.98, material="POP Doped Polystyrene")
+detectors = [det1]
+@time runhemisim(sim_num, detectors, r, (0, 0, 0), ℓ)
+```
 
 # TODOs:
 - [ ] Error propagation.
