@@ -37,8 +37,8 @@ function testcoverage1_hemisimlite(n::Int=50000)
     β_err = √(β * (1 - β) / n)
     rate = β * ℓ^2 * 2π / 3 * I₀
     rate_err = β_err * ℓ^2 * 2π / 3 * I₀
-    println("rate = $rate ± $rate_err")
-    println("expected rate = $expected_rate")
+    # println("rate = $rate ± $rate_err")
+    # println("expected rate = $expected_rate")
     @test rate ≈ expected_rate atol = 2rate_err
 end
 
@@ -50,7 +50,7 @@ testcoverage1_hemisimlite()
 """
 Test for coincidence between multiple detectors. 
 """
-function testcoverage2_hemisimlite(n::Int=500000)
+function testcoverage2_hemisimlite(n::Int=50000)
     I₀ = 58
 
     # Construct two planar surfaces oriented at θ
@@ -70,7 +70,7 @@ function testcoverage2_hemisimlite(n::Int=500000)
 
     β = sum(res) / n
     β_err = √(β * (1 - β) / n)
-    println("β = $β ± $β_err")
+    # println("β = $β ± $β_err")
     rate = β * ℓ^2 * 2π / 3 * I₀
     rate_err = β_err * ℓ^2 * 2π / 3 * I₀
     expected_rate = w^2 * I₀ * cos(θ)^2 * w^2 / d^2
