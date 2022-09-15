@@ -2,6 +2,7 @@
 
 module CoverageTest
 
+# %%
 include(joinpath(dirname(@__FILE__), "testutils.jl"))
 
 using Test
@@ -17,78 +18,68 @@ end
 # import MuSim:_randvec!, _randcos2, _randcos3
 
 # %%
-I₀ = 58
-total_rate = 2pi / 3 * I₀ * ℓ^2 # 1 second normalisation    
-
 """
-Test for basic coverage of one box.
+Test for basic coverage of one box. Returns beta and beta_err multiplied by simulation ℓ^2.
 """
-function testcoverage(n::Int=300000)
-    # Construct a 1 m x 2 m x 3 m box
+function testcoverage1_hemisimlite(n::Int=50000)
+    I₀ = 58
+    (x, y, z) = (1, 2, 3)
+    expected_rate = (x * y * π / 2 + 2 * x * z * π / 8 + 2 * y * z * π / 8) * I₀
 
+    # Construct a X x Y x Z box (unit m)
+    box = [RectBox("A", x, y, z)]
+    r = max(x, y, z) * 3
+    ℓ = max(x * y, x * z, y * z) * 2
+    # println("r = $r, ℓ = $ℓ")
+    results = runhemisimlite(n, box, r, (0, 0, 0), ℓ)
 
-
-    detectors = [RectBox("A", 0.05, 0.05, 0.001, position=(0.0, 0.0, z), efficiency=1.0) for z in z_pos]
-
-    println("--- Hemispherical simulation started ---")
-    results, _, _ = runhemisim(n, detectors, r, (0, 0, 0), ℓ)
-
-    single_hits = sum(results, dims=1)
-    single_hits_err = .√single_hits
-    single_hits *= total_rate / n
-    single_hits_err *= total_rate / n
-
-    expected_rate = @. pi^2 * r^2 * I₀ * (r^2 / z_pos^2)
-    return (abs.(z_pos), vec(single_hits), vec(single_hits_err), expected_rate)
+    β = sum(results) / n
+    β_err = √(β * (1 - β) / n)
+    rate = β * ℓ^2 * 2π / 3 * I₀
+    rate_err = β_err * ℓ^2 * 2π / 3 * I₀
+    println("rate = $rate ± $rate_err")
+    println("expected rate = $expected_rate")
+    @test rate ≈ expected_rate atol = 2rate_err
 end
 
 # %%
-# Test 1/R² rule
-(_, rates, errs, expected) = testhemisphericalcoverage()
-@test all(rates - 3.5errs <= expected <= rates + 3.5errs)
+# Basic coverage test
+testcoverage1_hemisimlite()
 
-function testefficientcoverage(n::Int=300000)
-    # Testing partial coverage of the hemisphere to increase efficiency of the simulation
-    println("--- Partial Coverage Test started ---")
+# %%
+"""
+Test for coincidence between multiple detectors. 
+"""
+function testcoverage2_hemisimlite(n::Int=500000)
+    I₀ = 58
 
-    # Generate a reference setup
-    r = 0.70
-    ℓ = 0.10
+    # Construct two planar surfaces oriented at θ
+    w = 0.05
+    d = 1.0 # r distance between centers (on a sphere)
+    θ = π / 4
+    box1 = RectBox("A", w, w, 0.001; orientation=(θ, 0))
+    box2 = RectBox("B", w, w, 0.001; position=(sin(θ) * d, 0, cos(θ) * d), orientation=(θ, 0))
+    # println("position=($d, 0, $(tan(π / 2 - θ) * d))")
+    dets = [box1, box2]
 
-    # Set up the detectors
-    det1 = RectBox("A", 0.05, 0.05, 0.01, position=(0.0, 0.0, 0.0), efficiency=1.0)
-    det2 = RectBox("B", 0.05, 0.05, 0.01, position=(0.25, 0.0, 0.25 * sqrt(3.0)), efficiency=1.0)
+    r = d * 2
+    ℓ = w * 2
+    # println("r = $r, ℓ = $ℓ")
+    results = runhemisimlite(n, dets, r, (0, 0, 0), ℓ)
+    res = view(results, :, 1) .& view(results, :, 2)
 
-    total_rate = 2pi / 3 * I₀ * ℓ^2 # 1 second normalisation    
-
-    detectors = [det1, det2]
-
-    results, _, _ = runhemisim(n, detectors, r, (0, 0, 0), ℓ)
-
-    coin_hits = sum(results[:, 1] .& results[:, 2])
-    println("Total hits: $coin_hits")
-    coin_hits_err = √coin_hits
-    coin_hits *= total_rate / n
-    coin_hits_err *= total_rate / n
-
-
-    # Efficient simulation
-    θs = deg2rad.((25, 35))
-    φs = deg2rad.((-10, 10))
-    results, _, _ = runhemisim(n, detectors, r, (0, 0, 0), ℓ; θ_range=θs, φ_range=φs)
-    total_rate = (φs[2] - φs[1]) * abs(1 / 3 * (cos(θs[2])^3 - cos(θs[1])^3)) * I₀ * ℓ^2 # 1 second normalisation    
-
-    coin_hits_eff = sum(results[:, 1] .& results[:, 2])
-    println("Total hits: $coin_hits_eff")
-    coin_hits_eff_err = √coin_hits_eff
-    coin_hits_eff *= total_rate / n
-    coin_hits_eff_err *= total_rate / n
-
-
-    @test abs(coin_hits - coin_hits_eff) ≈ 0 atol = √(coin_hits_err^2 + coin_hits_eff_err^2)
-    return nothing
+    β = sum(res) / n
+    β_err = √(β * (1 - β) / n)
+    println("β = $β ± $β_err")
+    rate = β * ℓ^2 * 2π / 3 * I₀
+    rate_err = β_err * ℓ^2 * 2π / 3 * I₀
+    expected_rate = w^2 * I₀ * cos(θ)^2 * w^2 / d^2
+    # println("rate = $rate ± $rate_err")
+    # println("expected rate = $expected_rate")
+    @test rate ≈ expected_rate atol = 2rate_err
 end
 
-testefficientcoverage()
+testcoverage2_hemisimlite()
 
+# %%
 end
