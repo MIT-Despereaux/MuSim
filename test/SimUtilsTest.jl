@@ -1,4 +1,4 @@
-### Tests for sampling geometry validations.
+### Tests for simulation utilities.
 
 module SimUtilsTest
 
@@ -21,7 +21,7 @@ mkpath(OUT_DIR)
 
 # %%
 """
-???
+Integration test for the essential functions.
 """
 function testrunexp(n::Int=1000000)
     # Construct two planar surfaces oriented at θ
@@ -52,7 +52,7 @@ function testrunexp(n::Int=1000000)
     config["detectors"] = dets
     push!(sim_configs, config)
 
-    res = runexp(OUT_DIR, dets, sim_configs; batch_size=100000)
+    res, sim_configs = runexp(OUT_DIR, dets, sim_configs; batch_size=100000)
 
     # Check the two results are the same
     det_order = Dict{String,Int}()
@@ -62,15 +62,21 @@ function testrunexp(n::Int=1000000)
 
     res1 = calcgeo(det_order, res[1], ["A", "B"], true)
     res2 = calcgeo(det_order, res[2], ["A", "B"], false)
-    println("res1 = $res1")
-    println("res2 = $res2")
+    # println("res1 = $res1")
+    # println("res2 = $res2")
     @test all(.≈(res1, res2, rtol=0.1))
 
     res1 = calcgeo(det_order, res[1], ["A", "C"], true)
     res2 = calcgeo(det_order, res[2], ["A", "C"], false)
-    println("res1 = $res1")
-    println("res2 = $res2")
+    # println("res1 = $res1")
+    # println("res2 = $res2")
     @test all(.≈(res1, res2, rtol=0.1))
+
+    βs1 = geometricio(OUT_DIR, res[1], sim_configs[1])
+    βs2 = geometricio(OUT_DIR, res[2], sim_configs[2])
+    println("βs1 = $βs1")
+    println("βs2 = $βs2")
+    @test all(map(k -> ≈(βs1[k], βs2[k], rtol=0.1), collect(keys(βs1))))
 end
 
 # %%

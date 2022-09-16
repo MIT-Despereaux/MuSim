@@ -4,8 +4,9 @@ using FLoops, BangBang, MicroCollections
 using SparseArrays
 using DataStructures
 using Distributions
+using Combinatorics
 using Random
-using JLD2
+using JLD2, CSV
 
 """
 Returns the relative direction and error going from center of T1 to center of T2, in spherical coordinates.
@@ -260,6 +261,16 @@ function runexp(output_dir, detectors, sim_configs; batch_size=Int(1e6), lite=tr
     results = Vector{Any}(undef, length(sim_configs))
 
     for (i, config) in enumerate(sim_configs)
+        center = config["center"]
+        if center === nothing
+            # Automatically determine ℓ, r if center is not provided
+            ℓ, r = _get_ℓ_r(detectors)
+        else
+            ℓ = config["ℓ"]
+            r = config["r"]
+        end
+        config["ℓ"] = ℓ
+        config["r"] = r
         config_hash = hash(config)
         println("Config hash: $(config_hash)")
         f_name = joinpath(output_dir, "sim_cache_H$(config_hash).jld2")
@@ -276,16 +287,6 @@ function runexp(output_dir, detectors, sim_configs; batch_size=Int(1e6), lite=tr
                 continue
             end
             batch_sim_num = min(config["sim_num"] - (b - 1) * batch_size, batch_size)
-            center = config["center"]
-            if center === nothing
-                # Automatically determine ℓ, r if center is not provided
-                ℓ, r = _get_ℓ_r(detectors)
-            else
-                ℓ = config["ℓ"]
-                r = config["r"]
-            end
-            config["ℓ"] = ℓ
-            config["r"] = r
             println("\n--- Simulation events $batch_sim_num, batch#$b, config#$i, ℓ=$ℓ r=$r started ---")
             if lite
                 push!(results_tmp, runhemisimlite(batch_sim_num, detectors, r, ℓ; center=center))
@@ -295,9 +296,118 @@ function runexp(output_dir, detectors, sim_configs; batch_size=Int(1e6), lite=tr
             @save f_name config detectors results_tmp
         end
         results[i] = results_tmp
+        sim_configs[i] = config
     end
 
-    return results
+    return results, sim_configs
+end
+
+
+"""
+Helper function that takes in the result table and the detector "pairs"
+and outputs the inclusive and exclusive geometric factor. 
+The pair should be a list of string, and can be of any order.
+Requires a dict containing the "detect_order": det name -> column#.
+?? Detector name comes from the uncopied detector list, with convention "Det_?", where ? is the detector name.
+"""
+function calcgeo(det_order, res, pair, optimize)
+    exc_geo_factor = 0
+    inc_geo_factor = 0
+    sort!(pair)
+    total_n = 0
+    for res_tup in res
+        if typeof(res_tup) <: Tuple
+            res_spmat = res_tup[1]
+        else
+            res_spmat = res_tup
+        end
+        total_n += size(res_spmat, 1)
+        if optimize
+            angles = reshape(res_tup[end], 2, :)
+            dist_θ = res_tup[end-2]
+            dist_φ = res_tup[end-1]
+        end
+        init_idx = det_order[pair[1]]
+        exc_pair_res = res_spmat[:, init_idx]
+        inc_pair_res = res_spmat[:, init_idx]
+        for (det, col) in det_order
+            if det == pair[1]
+                continue
+            end
+            bit_array = view(res_spmat, :, col) |> BitArray
+            if det in pair
+                inc_pair_res .&= bit_array
+                exc_pair_res .&= bit_array
+            else
+                exc_pair_res = exc_pair_res .> bit_array
+            end
+        end
+        if optimize
+            for i in eachindex(inc_pair_res)
+                if inc_pair_res[i]
+                    local θ = angles[1, i]
+                    local φ = angles[2, i]
+                    inc_geo_factor += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
+                end
+            end
+            for i in eachindex(exc_pair_res)
+                if exc_pair_res[i]
+                    local θ = angles[1, i]
+                    local φ = angles[2, i]
+                    exc_geo_factor += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
+                end
+            end
+        else
+            exc_geo_factor += sum(exc_pair_res)
+            inc_geo_factor += sum(inc_pair_res)
+        end
+    end
+    println("Combination: $(pair)")
+
+    println("Total number of events: $(total_n)")
+    exc_res = exc_geo_factor / total_n
+    inc_res = inc_geo_factor / total_n
+    println("Exclusive beta: $(exc_res)")
+    println("Inclusive beta: $(inc_res)")
+    return inc_res, exc_res
+end
+
+
+"""
+This function processes the input result table and outputs the geometric
+factors as a dict. It also saves the dict as a csv file.
+"""
+function geometricio(output_dir, res, config; overwrite=false)
+    config_hash = hash(config)
+    println("Config hash: $(config_hash)")
+    # Check the output table
+    f_name = joinpath(output_dir, "comb_table_H$(config_hash).csv")
+    if isfile(f_name) && !overwrite
+        println("$(f_name) found, loading...")
+        geo_factors = CSV.File(f_name) |> Dict{String,Float64}
+    else
+        geo_factors = Dict{String,Float64}()
+        detectors = config["detectors"]
+        det_order = Dict{String,Int}(d.name => i for (i, d) in enumerate(detectors))
+        if config["center"] === nothing
+            optimize = true
+        else
+            optimize = false
+        end
+        # List all combinations
+        combs = combinations(collect(keys(det_order)))
+        for c in combs
+            # join(β, delim) for concatenation
+            if optimize && detectors[1].name ∉ c
+                continue
+            end
+            (inclusive_β, exclusive_β) = calcgeo(det_order, res, c, optimize)
+            geo_factors["inc_beta_$(join(c, "_"))"] = inclusive_β * config["ℓ"]^2
+            geo_factors["exc_beta_$(join(c, "_"))"] = exclusive_β * config["ℓ"]^2
+        end
+        CSV.write(f_name, geo_factors)
+    end
+    return geo_factors
 end
 
 
@@ -407,117 +517,3 @@ end
 #     end
 #     return sim_res
 # end
-
-
-"""
-Helper function that takes in the result table and the detector "pairs"
-and outputs the inclusive and exclusive geometric factor. 
-The pair should be a list of string, and can be of any order.
-Requires a dict containing the "detect_order": det name -> column#.
-Detector name comes from the uncopied detector list, with convention "Det_?", where ? is the detector name.
-"""
-function calcgeo(det_order, res, pair, optimize)
-    exc_geo_factor = 0
-    inc_geo_factor = 0
-    sort!(pair)
-    total_n = 0
-    for res_tup in res
-        if typeof(res_tup) <: Tuple
-            res_spmat = res_tup[1]
-        else
-            res_spmat = res_tup
-        end
-        total_n += size(res_spmat, 1)
-        if optimize
-            angles = reshape(res_tup[end], 2, :)
-            dist_θ = res_tup[end-2]
-            dist_φ = res_tup[end-1]
-        end
-        init_idx = det_order[pair[1]]
-        exc_pair_res = res_spmat[:, init_idx]
-        inc_pair_res = res_spmat[:, init_idx]
-        for (det, col) in det_order
-            if det == pair[1]
-                continue
-            end
-            bit_array = view(res_spmat, :, col) |> BitArray
-            if det in pair
-                inc_pair_res .&= bit_array
-                exc_pair_res .&= bit_array
-            else
-                exc_pair_res = exc_pair_res .> bit_array
-            end
-        end
-        if optimize
-            for i in eachindex(inc_pair_res)
-                if inc_pair_res[i]
-                    local θ = angles[1, i]
-                    local φ = angles[2, i]
-                    inc_geo_factor += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
-                end
-            end
-            for i in eachindex(exc_pair_res)
-                if exc_pair_res[i]
-                    local θ = angles[1, i]
-                    local φ = angles[2, i]
-                    exc_geo_factor += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
-                end
-            end
-        else
-            exc_geo_factor += sum(exc_pair_res)
-            inc_geo_factor += sum(inc_pair_res)
-        end
-    end
-    println("Combination: $(pair)")
-
-    println("Total number of events: $(total_n)")
-    exc_res = exc_geo_factor / total_n
-    inc_res = inc_geo_factor / total_n
-    println("Exclusive beta: $(exc_res)")
-    println("Inclusive beta: $(inc_res)")
-    return inc_res, exc_res
-end
-
-
-"""
-This function processes the input result table and outputs the naive geometric
-factors as a dict. It also saves the dict as a pkl file.
-"""
-function geometricio(output_dir, detectors, linked_dets, res, config; overwrite=false)
-    config_hash = hash(config)
-    println("Config hash: $(config_hash)")
-    # Check the output table
-    f_name = joinpath(output_dir, "comb_table_H$(config_hash).csv")
-    if isfile(f_name) && !overwrite
-        println("$(f_name) found, loading...")
-        df_gfac = pd.read_csv(f_name, index_col=0)
-        df_gfac = df_gfac.transpose().iloc[0]
-        geo_factors = df_gfac.to_dict()
-    else
-        geo_factors = Dict{String,Float64}()
-        det_order = Dict{String,Int}()
-        all_dets = []
-        linked_pairs = []
-        for (i, det) in enumerate(detectors)
-            name = split(det.name, "_", limit=2)[end]
-            det_order[name] = i
-            push!(all_dets, name)
-        end
-        for p in linked_dets
-            linked_tuple = Tuple(split(d.name, "_", limit=2)[end] for d in p)
-            push!(linked_pairs, linked_tuple)
-        end
-        # List all combinations
-        betas = combinations(all_dets)
-        for β in betas
-            # join(β, delim) for concatenation
-            (inc_res, exc_res) = calcgeo(det_order, res, β)
-            geo_factors["inc_beta_$(join(β, "_"))"] = inc_res * config["ℓ"]^2
-            geo_factors["exc_beta_$(join(β, "_"))"] = exc_res * config["ℓ"]^2
-        end
-        df_gfac = pd.Series(geo_factors)
-        df_gfac.to_csv(f_name)
-    end
-    return geo_factors
-end
-
