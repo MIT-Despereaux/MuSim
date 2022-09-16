@@ -49,7 +49,7 @@ function runhemisim(n_sim::Int, detectors::Vector{T},
     R::Real, ℓ::Real;
     exec=ThreadedEx(), center::Union{NTuple{3,Real},Nothing}=nothing) where {T<:LabObject{<:Real}}
     if center === nothing
-        center = detectors[1].position
+        center = detectors[1].position |> Tuple
         optimize = true
     else
         optimize = false

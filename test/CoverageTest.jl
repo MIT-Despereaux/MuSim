@@ -139,4 +139,60 @@ end
 testcoverage3_hemisimlite()
 
 # %%
+"""
+Test for optimization for the full simulation.
+"""
+function testcoverage4_hemisimlite(n::Int=100000)
+    I₀ = 58
+
+    # Construct two planar surfaces oriented at θ
+    w = 0.05
+    d = 1.0 # r distance between centers (on a sphere)
+    θ = 0.0
+    θ2 = θ + deg2rad(3)
+    box1 = RectBox("A", w, w, 0.001; orientation=(θ, 0))
+    box2 = RectBox("B", w, w, 0.001; position=(sin(θ) * d, 0, cos(θ) * d), orientation=(θ, 0))
+    box3 = RectBox("C", w, w, 0.001; position=(sin(θ2) * d * 1.5, 0, cos(θ2) * d * 1.5), orientation=(θ2, 0))
+    dets = [box1, box2, box3]
+
+    r = d * 2
+    ℓ = w * 2
+    # println("r = $r, ℓ = $ℓ")
+    (results, _, _, dist_θ, dist_φ, angles) = runhemisim(n, dets, r, ℓ)
+    angles = reshape(angles, 2, :)
+    res = view(results, :, 1) .& view(results, :, 2)
+    # Importance sampling
+    β = 0
+    for i in eachindex(res)
+        if res[i]
+            local θ = angles[1, i]
+            local φ = angles[2, i]
+            β += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
+        end
+    end
+    β /= n
+    # Calculate the variance
+    σβ = 0
+    for i in eachindex(res)
+        if res[i]
+            local θ = angles[1, i]
+            local φ = angles[2, i]
+            σβ += (3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ)) - β)^2
+        else
+            σβ += (β)^2
+        end
+    end
+    β_err = (√σβ) / n
+    # println("β = $β ± $β_err")
+    rate = β * ℓ^2 * 2π / 3 * I₀
+    rate_err = β_err * ℓ^2 * 2π / 3 * I₀
+    expected_rate = w^2 * I₀ * cos(θ)^2 * w^2 / d^2
+    println("rate = $rate ± $rate_err")
+    println("expected rate = $expected_rate")
+    @test rate ≈ expected_rate atol = 2rate_err
+end
+
+testcoverage4_hemisimlite()
+
+# %%
 end
