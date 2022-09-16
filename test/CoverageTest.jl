@@ -142,7 +142,7 @@ testcoverage3_hemisimlite()
 """
 Test for optimization for the full simulation.
 """
-function testcoverage4_hemisimlite(n::Int=100000)
+function testcoverage4_hemisim(n::Int=100000)
     I₀ = 58
 
     # Construct two planar surfaces oriented at θ
@@ -192,7 +192,7 @@ function testcoverage4_hemisimlite(n::Int=100000)
     @test rate ≈ expected_rate atol = 2rate_err
 end
 
-testcoverage4_hemisimlite()
+testcoverage4_hemisim()
 
 # %%
 end
