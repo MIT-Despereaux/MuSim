@@ -74,8 +74,8 @@ function testrunexp(n::Int=1000000)
 
     βs1 = geometricio(OUT_DIR, res[1], sim_configs[1])
     βs2 = geometricio(OUT_DIR, res[2], sim_configs[2])
-    println("βs1 = $βs1")
-    println("βs2 = $βs2")
+    # println("βs1 = $βs1")
+    # println("βs2 = $βs2")
     @test all(map(k -> ≈(βs1[k], βs2[k], rtol=0.1), collect(keys(βs1))))
 end
 
