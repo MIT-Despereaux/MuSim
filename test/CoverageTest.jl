@@ -13,6 +13,8 @@ if isdefined(@__MODULE__, :LanguageServer)
 else
     using MuSim
 end
+using Distributions, FLoops
+# using Plots
 
 # Submodules
 # import MuSim:_randvec!, _randcos2, _randcos3
@@ -31,7 +33,7 @@ function testcoverage1_hemisimlite(n::Int=50000)
     r = max(x, y, z) * 3
     ℓ = max(x * y, x * z, y * z) * 2
     # println("r = $r, ℓ = $ℓ")
-    results = runhemisimlite(n, box, r, (0, 0, 0), ℓ)
+    results = runhemisimlite(n, box, r, ℓ; center=(0, 0, 0))
 
     β = sum(results) / n
     β_err = √(β * (1 - β) / n)
@@ -50,7 +52,7 @@ testcoverage1_hemisimlite()
 """
 Test for coincidence between multiple detectors. 
 """
-function testcoverage2_hemisimlite(n::Int=50000)
+function testcoverage2_hemisimlite(n::Int=100000)
     I₀ = 58
 
     # Construct two planar surfaces oriented at θ
@@ -64,7 +66,7 @@ function testcoverage2_hemisimlite(n::Int=50000)
     r = d * 2
     ℓ = w * 2
     # println("r = $r, ℓ = $ℓ")
-    results = runhemisimlite(n, dets, r, (0, 0, 0), ℓ)
+    results = runhemisimlite(n, dets, r, ℓ; center=(0, 0, 0))
     res = view(results, :, 1) .& view(results, :, 2)
 
     β = sum(res) / n
@@ -73,12 +75,68 @@ function testcoverage2_hemisimlite(n::Int=50000)
     rate = β * ℓ^2 * 2π / 3 * I₀
     rate_err = β_err * ℓ^2 * 2π / 3 * I₀
     expected_rate = w^2 * I₀ * cos(θ)^2 * w^2 / d^2
-    # println("rate = $rate ± $rate_err")
-    # println("expected rate = $expected_rate")
+    println("rate = $rate ± $rate_err")
+    println("expected rate = $expected_rate")
     @test rate ≈ expected_rate atol = 2rate_err
 end
 
 testcoverage2_hemisimlite()
+
+# %%
+"""
+Test for optimization.
+"""
+function testcoverage3_hemisimlite(n::Int=100000)
+    I₀ = 58
+
+    # Construct two planar surfaces oriented at θ
+    w = 0.05
+    d = 1.0 # r distance between centers (on a sphere)
+    θ = 0.0
+    θ2 = θ + deg2rad(3)
+    box1 = RectBox("A", w, w, 0.001; orientation=(θ, 0))
+    box2 = RectBox("B", w, w, 0.001; position=(sin(θ) * d, 0, cos(θ) * d), orientation=(θ, 0))
+    box3 = RectBox("C", w, w, 0.001; position=(sin(θ2) * d * 1.5, 0, cos(θ2) * d * 1.5), orientation=(θ2, 0))
+    dets = [box1, box2, box3]
+
+    r = d * 2
+    ℓ = w * 2
+    # println("r = $r, ℓ = $ℓ")
+    (results, dist_θ, dist_φ, angles) = runhemisimlite(n, dets, r, ℓ)
+    angles = reshape(angles, 2, :)
+    res = view(results, :, 1) .& view(results, :, 2)
+    # Importance sampling
+    β = 0
+    for i in eachindex(res)
+        if res[i]
+            local θ = angles[1, i]
+            local φ = angles[2, i]
+            β += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
+        end
+    end
+    β /= n
+    # Calculate the variance
+    σβ = 0
+    for i in eachindex(res)
+        if res[i]
+            local θ = angles[1, i]
+            local φ = angles[2, i]
+            σβ += (3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ)) - β)^2
+        else
+            σβ += (β)^2
+        end
+    end
+    β_err = (√σβ) / n
+    # println("β = $β ± $β_err")
+    rate = β * ℓ^2 * 2π / 3 * I₀
+    rate_err = β_err * ℓ^2 * 2π / 3 * I₀
+    expected_rate = w^2 * I₀ * cos(θ)^2 * w^2 / d^2
+    println("rate = $rate ± $rate_err")
+    println("expected rate = $expected_rate")
+    @test rate ≈ expected_rate atol = 2rate_err
+end
+
+testcoverage3_hemisimlite()
 
 # %%
 end

@@ -145,30 +145,29 @@ Randomly generate a ray on the upper hemisphere with radius R. The direction is 
 See http://arxiv.org/abs/1912.05462.
 """
 function Ray(R::Real, center::NTuple{3,Real}, side_len::Real;
-    θ::Union{Nothing,NTuple{2,Real},Real}=nothing, φ::Union{Nothing,NTuple{2,Real},Real}=nothing)
+    θ::Union{Nothing,Real}=nothing, φ::Union{Nothing,Real}=nothing)
     if θ === nothing
         # Generate by the distribution
-        θ = _randcos2()
-    elseif length(θ) == 2
-        θ = _randcos2(θ[1], θ[2])
+        θs = _randcos2()
+    else
+        θs = θ
     end
     if φ === nothing
-        φ = rand() * 2pi
-    elseif length(φ) == 2
-        @assert (φ[2] - φ[1]) >= 0
-        φ = rand() * (φ[2] - φ[1]) + φ[1]
+        φs = rand() * 2pi
+    else
+        φs = φ
     end
-    start_θ = pi - θ
-    start_φ = φ + pi
+    start_θ = pi - θs
+    start_φ = φs + pi
     (x, y, z) = SA_F64[sin(start_θ)*cos(start_φ), sin(start_θ)*sin(start_φ), cos(start_θ)] * R
     (a, b) = rand(2) * side_len .- side_len / 2
-    θ_hat = SA_F64[cos(θ)*cos(φ), cos(θ)*sin(φ), -sin(θ)]
-    φ_hat = SA_F64[-sin(φ), cos(φ), 0]
+    θ_hat = SA_F64[cos(θs)*cos(φs), cos(θs)*sin(φs), -sin(θs)]
+    φ_hat = SA_F64[-sin(φs), cos(φs), 0]
     (dx, dy, dz) = a * θ_hat + b * φ_hat
     x += center[1] + dx
     y += center[2] + dy
     z += center[3] + dz
-    return Ray(azimuth_agl=θ, polar_agl=φ, start_position=SA_F64[x, y, z])
+    return Ray(azimuth_agl=θs, polar_agl=φs, start_position=SA_F64[x, y, z])
 end
 
 

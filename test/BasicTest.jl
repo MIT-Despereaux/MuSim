@@ -14,7 +14,7 @@ else
     using MuSim
 end
 
-import MuSim: _cart2unitsph
+import MuSim: _cart2unitsph, _relativedir
 
 # %%
 """
@@ -57,6 +57,15 @@ function testcart2unitsph()
     @test _cart2unitsph(1 / √2, 1 / √2, 1) |> Tuple == (π / 4, π / 4)
 end
 
+function testrelativedir()
+    box1 = RectBox("A", 2.0, 2.0, 0.001, position=(0, 0, 0), orientation=deg2rad.((0, 0)))
+    box2 = RectBox("B", 2.0, 2.0, 0.001, position=(0, 0, √2), orientation=deg2rad.((0, 0)))
+    @test all(.≈(_relativedir(box1, box2), (0, 0, π / 4, 6π / 4), atol=1e-3))
+    box1 = RectBox("A", 2.0, 1.0, 0.001, position=(0, 0, 0), orientation=deg2rad.((0, 0)))
+    box2 = RectBox("B", 2.0, 1.0, 0.001, position=(0, 0, √2), orientation=deg2rad.((30, 0)))
+    @test all(.≈(_relativedir(box1, box2), (0, 0, atan(2 / (2√2 - 1)), 5π / 3), atol=1e-3))
+end
+
 
 # %%
 testrectboxhash()
@@ -64,6 +73,7 @@ testrectboxequal()
 testsphereequal()
 testcylinderequal()
 testcart2unitsph()
+testrelativedir()
 
 # %%
 end # module
