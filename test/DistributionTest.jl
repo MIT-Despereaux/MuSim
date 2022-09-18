@@ -23,7 +23,7 @@ import MuSim: _randcos2, _randcos3
 """
 Helper function that returns the bin_centers, counts, errs and expected values in each bins from the desired θ angle distribution.
 """
-function testθdist(dist::Function, expected::Function, l_bound::Real, u_bound::Real, n::Int=35000)
+function test_θdist(dist::Function, expected::Function, l_bound::Real, u_bound::Real, n::Int=35000)
     vals = [dist(l_bound, u_bound) for i in 1:n]
     bin_edges = collect(range(l_bound, u_bound, length=30))
     bin_centers = (bin_edges.+((bin_edges[2]-bin_edges[1])/2))[1:end-1]
@@ -39,10 +39,10 @@ end
 # %%
 # Test drawing from a custom distribution
 expected_f = x -> @. abs(3cos(x)^2 * sin(x))
-(_, counts, errs, expected) = testθdist(_randcos2, expected_f, π / 2, π)
+(_, counts, errs, expected) = test_θdist(_randcos2, expected_f, π / 2, π)
 @test all(counts - 3.5errs <= expected <= counts + 3.5errs)
 expected_f = x -> @. abs(4cos(x)^3 * sin(x))
-(_, counts, errs, expected) = testθdist(_randcos3, expected_f, π / 2, π)
+(_, counts, errs, expected) = test_θdist(_randcos3, expected_f, π / 2, π)
 @test all(counts - 3.5errs <= expected <= counts + 3.5errs)
 
 # %%

@@ -23,7 +23,7 @@ using Distributions, FLoops
 """
 Test for basic coverage of one box. Returns beta and beta_err multiplied by simulation ℓ^2.
 """
-function testcoverage1_hemisimlite(n::Int=50000)
+function test_coverage1_hemisimlite(n::Int=50000)
     I₀ = 58
     (x, y, z) = (1, 2, 3)
     expected_rate = (x * y * π / 2 + 2 * x * z * π / 8 + 2 * y * z * π / 8) * I₀
@@ -46,19 +46,19 @@ end
 
 # %%
 # Basic coverage test
-testcoverage1_hemisimlite()
+test_coverage1_hemisimlite()
 
 # %%
 """
 Test for coincidence between multiple detectors. 
 """
-function testcoverage2_hemisimlite(n::Int=100000)
+function test_coverage2_hemisimlite(n::Int=1000000)
     I₀ = 58
 
     # Construct two planar surfaces oriented at θ
     w = 0.05
     d = 1.0 # r distance between centers (on a sphere)
-    θ = π / 4
+    θ = 27π / 60
     box1 = RectBox("A", w, w, 0.001; orientation=(θ, 0))
     box2 = RectBox("B", w, w, 0.001; position=(sin(θ) * d, 0, cos(θ) * d), orientation=(θ, 0))
     dets = [box1, box2]
@@ -80,31 +80,34 @@ function testcoverage2_hemisimlite(n::Int=100000)
     @test rate ≈ expected_rate atol = 2rate_err
 end
 
-testcoverage2_hemisimlite()
+test_coverage2_hemisimlite()
 
 # %%
 """
 Test for optimization.
 """
-function testcoverage3_hemisimlite(n::Int=100000)
-    I₀ = 58
+function test_coverage3_hemisimlite(n::Int=1000000)
+    I₀ = 1
 
     # Construct two planar surfaces oriented at θ
     w = 0.05
     d = 1.0 # r distance between centers (on a sphere)
-    θ = 0.0
-    θ2 = θ + deg2rad(3)
-    box1 = RectBox("A", w, w, 0.001; orientation=(θ, 0))
-    box2 = RectBox("B", w, w, 0.001; position=(sin(θ) * d, 0, cos(θ) * d), orientation=(θ, 0))
-    box3 = RectBox("C", w, w, 0.001; position=(sin(θ2) * d * 1.5, 0, cos(θ2) * d * 1.5), orientation=(θ2, 0))
-    dets = [box1, box2, box3]
+    θ1 = 20π / 60
+    box1 = RectBox("A", w, w, 0.001; orientation=(θ1, 0))
+    box2 = RectBox("B", w, w, 0.001; position=(sin(θ1) * d, 0, cos(θ1) * d), orientation=(θ1, 0))
+    dets = [box1, box2]
 
-    r = d * 2
+    r = 100
     ℓ = w * 2
     # println("r = $r, ℓ = $ℓ")
     (results, dist_θ, dist_φ, angles) = runhemisimlite(n, dets, r, ℓ)
+    # println("dist_θ = $dist_θ, dist_φ = $dist_φ")
     angles = reshape(angles, 2, :)
     res = view(results, :, 1) .& view(results, :, 2)
+    # p1 = histogram(angles[1, :], bins=500, label="θ")
+    # p2 = histogram(angles[2, :], bins=500, label="φ")
+    # display(p1)
+    # display(p2)
     # Importance sampling
     β = 0
     for i in eachindex(res)
@@ -127,22 +130,24 @@ function testcoverage3_hemisimlite(n::Int=100000)
         end
     end
     β_err = (√σβ) / n
-    # println("β = $β ± $β_err")
-    rate = β * ℓ^2 * 2π / 3 * I₀
-    rate_err = β_err * ℓ^2 * 2π / 3 * I₀
-    expected_rate = w^2 * I₀ * cos(θ)^2 * w^2 / d^2
+    β *= ℓ^2
+    β_err *= ℓ^2
+    println("β = $β ± $β_err")
+    rate = β * 2π / 3 * I₀
+    rate_err = β_err * 2π / 3 * I₀
+    expected_rate = w^2 * I₀ * cos(θ1)^2 * w^2 / d^2
     println("rate = $rate ± $rate_err")
     println("expected rate = $expected_rate")
     @test rate ≈ expected_rate atol = 2rate_err
 end
 
-testcoverage3_hemisimlite()
+test_coverage3_hemisimlite()
 
 # %%
 """
 Test for optimization for the full simulation.
 """
-function testcoverage4_hemisim(n::Int=100000)
+function test_coverage4_hemisim(n::Int=100000)
     I₀ = 58
 
     # Construct two planar surfaces oriented at θ
@@ -192,7 +197,7 @@ function testcoverage4_hemisim(n::Int=100000)
     @test rate ≈ expected_rate atol = 2rate_err
 end
 
-testcoverage4_hemisim()
+test_coverage4_hemisim()
 
 # %%
 end

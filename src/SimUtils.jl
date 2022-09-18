@@ -10,6 +10,7 @@ using JLD2, CSV
 
 """
 Returns the relative direction and error going from center of T1 to center of T2, in spherical coordinates.
+!!! NEEDS FIX: FROM EDGE OF T1 to EDGE OF T2
 """
 function _relativedir(T1::RectBox{T}, T2::RectBox{T}) where {T<:Real}
     center_1 = T1.position
@@ -20,17 +21,25 @@ function _relativedir(T1::RectBox{T}, T2::RectBox{T}) where {T<:Real}
     θ_min = θ
     φ_max = φ
     φ_min = φ
-    for x_sign in (-1, 1)
-        for y_sign in (-1, 1)
-            for z_sign in (-1, 1)
-                v = (x_sign * T2.delta_x / 2, y_sign * T2.delta_y / 2, z_sign * T2.delta_z / 2) |> SVector{3,Float64}
-                v = _rotate(v, T2.orientation..., 0)
-                dir2 = center_2 - center_1 + v
-                (θ2, φ2) = _cart2unitsph(dir2...)
-                θ_max = max(θ_max, θ2)
-                θ_min = min(θ_min, θ2)
-                φ_max = max(φ_max, φ2)
-                φ_min = min(φ_min, φ2)
+    for x_sign_2 in (-1, 1)
+        for y_sign_2 in (-1, 1)
+            for z_sign_2 in (-1, 1)
+                for x_sign_1 in (-1, 1)
+                    for y_sign_1 in (-1, 1)
+                        for z_sign_1 in (-1, 1)
+                            v2 = (x_sign_2 * T2.delta_x / 2, y_sign_2 * T2.delta_y / 2, z_sign_2 * T2.delta_z / 2) |> SVector{3,Float64}
+                            v2 = _rotate(v2, T2.orientation..., 0)
+                            v1 = (x_sign_1 * T1.delta_x / 2, y_sign_1 * T1.delta_y / 2, z_sign_1 * T1.delta_z / 2) |> SVector{3,Float64}
+                            v1 = _rotate(v1, T1.orientation..., 0)
+                            dir2 = center_2 + v2 - (center_1 + v1)
+                            (θ2, φ2) = _cart2unitsph(dir2...)
+                            θ_max = max(θ_max, θ2)
+                            θ_min = min(θ_min, θ2)
+                            φ_max = max(φ_max, φ2)
+                            φ_min = min(φ_min, φ2)
+                        end
+                    end
+                end
             end
         end
     end
@@ -44,11 +53,31 @@ end
 Determines the simulation parameters by centering on the first detector.
 """
 function _get_ℓ_r(detectors::Vector{RectBox{T}}) where {T<:Real}
-    center = detectors[1].position
     (x, y, z) = (detectors[1].delta_x, detectors[1].delta_y, detectors[1].delta_z)
-    ℓ = √(max(x * y, x * z, y * z)) * 2
-    r = max(x, y, z) * 2
+    ℓ = √(max(x * y, x * z, y * z)) * 5
+    r = 100
     return ℓ, r
+end
+
+"""
+Helper function that creates the simulation configs in accordance of "fuzzy" detectors.
+config["δr"] is the 1σ position error.
+"""
+function gensimconfigs(config::Dict; n::Int=10, seed::Int=42) where {T<:Real}
+    δr = config["δr"]
+    detectors = config["detectors"]
+    generated_config = Dict{String,Any}[]
+    Random.seed!(seed)
+    for i in 1:n
+        dets = deepcopy(detectors)
+        cfg = deepcopy(config)
+        for d in dets
+            d.position += rand(Normal(0, δr), 3)
+        end
+        cfg["detectors"] = dets
+        push!(generated_config, cfg)
+    end
+    return generated_config
 end
 
 
@@ -76,8 +105,12 @@ function runhemisim(n_sim::Int, detectors::Vector{T},
         end
         mix_dist_θ = MixtureModel([Normal(θ > π / 2 ? π - θ : θ, Δθ) for (θ, φ, Δθ, Δφ) in rel_dirs])
         mix_dist_θ = truncated(mix_dist_θ, 0, π / 2)
-        mix_dist_φ = MixtureModel([Normal(φ, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
-        mix_dist_φ = truncated(mix_dist_φ, 0, 2π)
+        # mix_dist_θ = Uniform(0, π / 2)
+        φ_dist = [Normal(φ, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs]
+        append!(φ_dist, [Normal(φ - π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
+        append!(φ_dist, [Normal(φ + π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
+        mix_dist_φ = truncated(MixtureModel(φ_dist), -π, π)
+        # mix_dist_φ = Uniform(-π, π)
     else
         mix_dist_θ = nothing
         mix_dist_φ = nothing
@@ -98,11 +131,9 @@ function runhemisim(n_sim::Int, detectors::Vector{T},
             hit_vec .*= false
             # Generate a random ray
             if optimize
-                θ_sample = rand(mix_dist_θ)
-                φ_sample = rand(mix_dist_φ)
-                angles = (θ_sample, φ_sample)
-                θs = π - θ_sample
-                φs = π + φ_sample
+                θs = rand(mix_dist_θ)
+                φs = rand(mix_dist_φ)
+                angles = (θs, φs)
             else
                 θs = nothing
                 φs = nothing
@@ -163,6 +194,7 @@ function runhemisimlite(n_sim::Int, detectors::Vector{T},
     exec=ThreadedEx(), center::Union{NTuple{3,Real},Nothing}=nothing) where {T<:LabObject{<:Real}}
     if center === nothing
         center = detectors[1].position |> Tuple
+        # println("Center: ", center)
         optimize = true
     else
         optimize = false
@@ -175,8 +207,12 @@ function runhemisimlite(n_sim::Int, detectors::Vector{T},
         end
         mix_dist_θ = MixtureModel([Normal(θ > π / 2 ? π - θ : θ, Δθ) for (θ, φ, Δθ, Δφ) in rel_dirs])
         mix_dist_θ = truncated(mix_dist_θ, 0, π / 2)
-        mix_dist_φ = MixtureModel([Normal(φ, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
-        mix_dist_φ = truncated(mix_dist_φ, -π, π)
+        # mix_dist_θ = Uniform(0, π / 2)
+        φ_dist = [Normal(φ, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs]
+        append!(φ_dist, [Normal(φ - π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
+        append!(φ_dist, [Normal(φ + π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
+        mix_dist_φ = truncated(MixtureModel(φ_dist), -π, π)
+        # mix_dist_φ = Uniform(-π, π)
     else
         mix_dist_θ = nothing
         mix_dist_φ = nothing
@@ -196,11 +232,9 @@ function runhemisimlite(n_sim::Int, detectors::Vector{T},
             hit_vec .*= false
             # Generate a random ray
             if optimize
-                θ_sample = rand(mix_dist_θ)
-                φ_sample = rand(mix_dist_φ)
-                angles = (θ_sample, φ_sample)
-                θs = π - θ_sample
-                φs = π + φ_sample
+                θs = rand(mix_dist_θ)
+                φs = rand(mix_dist_φ)
+                angles = (θs, φs)
             else
                 θs = nothing
                 φs = nothing
@@ -248,7 +282,7 @@ and adopt the naming convention "sim_cache_H#.jld2":
 H -- Hash of the config dict;
 The outputs are vectors of simulation results.
 """
-function runexp(output_dir, detectors, sim_configs; batch_size=Int(1e6), lite=true, overwrite=false)
+function runexp(output_dir, sim_configs; batch_size=Int(1e6), lite=true, overwrite=false)
     # Run the simulation using the setup and return raw results
     # Print number of threads
     @printf("Total threads: %d\n", Threads.nthreads())
@@ -261,6 +295,7 @@ function runexp(output_dir, detectors, sim_configs; batch_size=Int(1e6), lite=tr
     results = Vector{Any}(undef, length(sim_configs))
 
     for (i, config) in enumerate(sim_configs)
+        detectors = config["detectors"]
         center = config["center"]
         if center === nothing
             # Automatically determine ℓ, r if center is not provided
@@ -305,14 +340,14 @@ end
 
 """
 Helper function that takes in the result table and the detector "pairs"
-and outputs the inclusive and exclusive geometric factor. 
+and outputs the inclusive and exclusive geometric factor (β). 
 The pair should be a list of string, and can be of any order.
 Requires a dict containing the "detect_order": det name -> column#.
 ?? Detector name comes from the uncopied detector list, with convention "Det_?", where ? is the detector name.
 """
-function calcgeo(det_order, res, pair, optimize)
-    exc_geo_factor = 0
-    inc_geo_factor = 0
+function calculateβ(det_order, res, pair, optimize)
+    inclusive_β = 0
+    exclusive_β = 0
     sort!(pair)
     total_n = 0
     for res_tup in res
@@ -328,16 +363,16 @@ function calcgeo(det_order, res, pair, optimize)
             dist_φ = res_tup[end-1]
         end
         init_idx = det_order[pair[1]]
-        exc_pair_res = res_spmat[:, init_idx]
         inc_pair_res = res_spmat[:, init_idx]
+        exc_pair_res = res_spmat[:, init_idx]
         for (det, col) in det_order
             if det == pair[1]
                 continue
             end
             bit_array = view(res_spmat, :, col) |> BitArray
             if det in pair
-                inc_pair_res .&= bit_array
                 exc_pair_res .&= bit_array
+                inc_pair_res .&= bit_array
             else
                 exc_pair_res = exc_pair_res .> bit_array
             end
@@ -347,39 +382,40 @@ function calcgeo(det_order, res, pair, optimize)
                 if inc_pair_res[i]
                     local θ = angles[1, i]
                     local φ = angles[2, i]
-                    inc_geo_factor += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
+                    inclusive_β += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
                 end
             end
             for i in eachindex(exc_pair_res)
                 if exc_pair_res[i]
                     local θ = angles[1, i]
                     local φ = angles[2, i]
-                    exc_geo_factor += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
+                    exclusive_β += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
                 end
             end
         else
-            exc_geo_factor += sum(exc_pair_res)
-            inc_geo_factor += sum(inc_pair_res)
+            inclusive_β += sum(inc_pair_res)
+            exclusive_β += sum(exc_pair_res)
         end
     end
     println("Combination: $(pair)")
 
     println("Total number of events: $(total_n)")
-    exc_res = exc_geo_factor / total_n
-    inc_res = inc_geo_factor / total_n
-    println("Exclusive beta: $(exc_res)")
-    println("Inclusive beta: $(inc_res)")
-    return inc_res, exc_res
+    inclusive_β /= total_n
+    exclusive_β /= total_n
+    println("Inclusive beta: $(inclusive_β)")
+    println("Exclusive beta: $(exclusive_β)")
+    return inclusive_β, exclusive_β
 end
 
 
 """
 This function processes the input result table and outputs the geometric
 factors as a dict. It also saves the dict as a csv file.
+The "first_only" option is used to output only the first detector.
 """
-function geometricio(output_dir, res, config; overwrite=false)
+function βio(output_dir, res, config; savefile=false, overwrite=false, first_only=false)
     config_hash = hash(config)
-    println("Config hash: $(config_hash)")
+    println("βio Config hash: $(config_hash)")
     # Check the output table
     f_name = joinpath(output_dir, "comb_table_H$(config_hash).csv")
     if isfile(f_name) && !overwrite
@@ -397,17 +433,64 @@ function geometricio(output_dir, res, config; overwrite=false)
         # List all combinations
         combs = combinations(collect(keys(det_order)))
         for c in combs
+            sort!(c)
             # join(β, delim) for concatenation
             if optimize && detectors[1].name ∉ c
                 continue
             end
-            (inclusive_β, exclusive_β) = calcgeo(det_order, res, c, optimize)
+            if first_only && detectors[1].name != c
+                continue
+            end
+            (inclusive_β, exclusive_β) = calculateβ(det_order, res, c, optimize)
             geo_factors["inc_beta_$(join(c, "_"))"] = inclusive_β * config["ℓ"]^2
             geo_factors["exc_beta_$(join(c, "_"))"] = exclusive_β * config["ℓ"]^2
         end
-        CSV.write(f_name, geo_factors)
+        if savefile
+            geo_factors = sort(collect(geo_factors), by=x -> x[1])
+            CSV.write(f_name, geo_factors)
+        end
     end
     return geo_factors
+end
+
+
+"""
+Compose the simulation assuming the first "detector" is the chip.
+This function aims to output the "correct" geometric factor.
+"""
+function composeβ(output_dir, detectors::Vector{RectBox{T}}, n_sim::Int; overwrite=false) where {T<:Real}
+    config = Dict{String,Any}("sim_num" => n_sim)
+    config["detectors"] = detectors
+    config_hash = hash(config)
+    println("composeβ Config hash: $(config_hash)")
+    # Check the output table
+    f_name = joinpath(output_dir, "comb_table_H$(config_hash).csv")
+    if isfile(f_name) && !overwrite
+        println("$(f_name) found, loading...")
+        βs = CSV.File(f_name) |> Dict{String,Float64}
+    else
+        βs = Dict{String,Float64}()
+        for i in eachindex(detectors)
+            dets = circshift(detectors, -i)
+            config["detectors"] = dets
+            config["center"] = nothing
+            res, sim_configs = runexp(output_dir, [config])
+            merge!(βs, βio(output_dir, res[1], sim_configs[1]))
+        end
+        for i in eachindex(detectors)
+            dets = circshift(detectors, -i)
+            config["detectors"] = dets
+            config["center"] = dets[1].position |> Tuple
+            ℓ, r = _get_ℓ_r(dets)
+            config["ℓ"] = ℓ
+            config["r"] = r
+            res, sim_configs = runexp(output_dir, [config])
+            merge!(βs, βio(output_dir, res[1], sim_configs[1]; first_only=true))
+        end
+    end
+    βs = sort(collect(βs), by=x -> x[1])
+    CSV.write(f_name, βs)
+    return βs
 end
 
 
