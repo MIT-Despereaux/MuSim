@@ -60,24 +60,20 @@ function _get_ℓ_r(detectors::Vector{RectBox{T}}) where {T<:Real}
 end
 
 """
-Helper function that creates the simulation configs in accordance of "fuzzy" detectors.
-config["δr"] is the 1σ position error.
+Helper function that samples the detector positions in accordance of "fuzzy" detectors.
+"δr" is the 1σ position error.
 """
-function gensimconfigs(config::Dict; n::Int=10, seed::Int=42) where {T<:Real}
-    δr = config["δr"]
-    detectors = config["detectors"]
-    generated_config = Dict{String,Any}[]
+function gendetectorpos(detectors::Vector{RectBox{T}}, δr::Real; n::Int=10, seed::Int=42) where {T<:Real}
+    generated_detectors = []
     Random.seed!(seed)
     for i in 1:n
         dets = deepcopy(detectors)
-        cfg = deepcopy(config)
         for d in dets
             d.position += rand(Normal(0, δr), 3)
         end
-        cfg["detectors"] = dets
-        push!(generated_config, cfg)
+        push!(generated_detectors, dets)
     end
-    return generated_config
+    return generated_detectors
 end
 
 
@@ -108,7 +104,9 @@ function runhemisim(n_sim::Int, detectors::Vector{T},
         # mix_dist_θ = Uniform(0, π / 2)
         φ_dist = [Normal(φ, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs]
         append!(φ_dist, [Normal(φ - π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
+        append!(φ_dist, [Normal(φ - 2π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
         append!(φ_dist, [Normal(φ + π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
+        append!(φ_dist, [Normal(φ + 2π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
         mix_dist_φ = truncated(MixtureModel(φ_dist), -π, π)
         # mix_dist_φ = Uniform(-π, π)
     else
@@ -210,7 +208,9 @@ function runhemisimlite(n_sim::Int, detectors::Vector{T},
         # mix_dist_θ = Uniform(0, π / 2)
         φ_dist = [Normal(φ, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs]
         append!(φ_dist, [Normal(φ - π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
+        append!(φ_dist, [Normal(φ - 2π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
         append!(φ_dist, [Normal(φ + π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
+        append!(φ_dist, [Normal(φ + 2π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
         mix_dist_φ = truncated(MixtureModel(φ_dist), -π, π)
         # mix_dist_φ = Uniform(-π, π)
     else
@@ -415,7 +415,7 @@ The "first_only" option is used to output only the first detector.
 """
 function βio(output_dir, res, config; savefile=false, overwrite=false, first_only=false)
     config_hash = hash(config)
-    println("βio Config hash: $(config_hash)")
+    println("βio config hash: $(config_hash)")
     # Check the output table
     f_name = joinpath(output_dir, "comb_table_H$(config_hash).csv")
     if isfile(f_name) && !overwrite
@@ -462,7 +462,7 @@ function composeβ(output_dir, detectors::Vector{RectBox{T}}, n_sim::Int; overwr
     config = Dict{String,Any}("sim_num" => n_sim)
     config["detectors"] = detectors
     config_hash = hash(config)
-    println("composeβ Config hash: $(config_hash)")
+    println("composeβ config hash: $(config_hash)")
     # Check the output table
     f_name = joinpath(output_dir, "comb_table_H$(config_hash).csv")
     if isfile(f_name) && !overwrite
@@ -490,7 +490,7 @@ function composeβ(output_dir, detectors::Vector{RectBox{T}}, n_sim::Int; overwr
     end
     βs = sort(collect(βs), by=x -> x[1])
     CSV.write(f_name, βs)
-    return βs
+    return (config_hash, βs)
 end
 
 

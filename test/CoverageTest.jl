@@ -16,14 +16,11 @@ end
 using Distributions, FLoops
 # using Plots
 
-# Submodules
-# import MuSim:_randvec!, _randcos2, _randcos3
-
 # %%
 """
 Test for basic coverage of one box. Returns beta and beta_err multiplied by simulation ℓ^2.
 """
-function test_coverage1_hemisimlite(n::Int=50000)
+function test_coverage1_hemisimlite(n_sim::Int=50000)
     I₀ = 58
     (x, y, z) = (1, 2, 3)
     expected_rate = (x * y * π / 2 + 2 * x * z * π / 8 + 2 * y * z * π / 8) * I₀
@@ -33,10 +30,10 @@ function test_coverage1_hemisimlite(n::Int=50000)
     r = max(x, y, z) * 3
     ℓ = max(x * y, x * z, y * z) * 2
     # println("r = $r, ℓ = $ℓ")
-    results = runhemisimlite(n, box, r, ℓ; center=(0, 0, 0))
+    results = runhemisimlite(n_sim, box, r, ℓ; center=(0, 0, 0))
 
-    β = sum(results) / n
-    β_err = √(β * (1 - β) / n)
+    β = sum(results) / n_sim
+    β_err = √(β * (1 - β) / n_sim)
     rate = β * ℓ^2 * 2π / 3 * I₀
     rate_err = β_err * ℓ^2 * 2π / 3 * I₀
     # println("rate = $rate ± $rate_err")
@@ -52,7 +49,7 @@ test_coverage1_hemisimlite()
 """
 Test for coincidence between multiple detectors. 
 """
-function test_coverage2_hemisimlite(n::Int=1000000)
+function test_coverage2_hemisimlite(n_sim::Int=1000000)
     I₀ = 58
 
     # Construct two planar surfaces oriented at θ
@@ -66,11 +63,11 @@ function test_coverage2_hemisimlite(n::Int=1000000)
     r = d * 2
     ℓ = w * 2
     # println("r = $r, ℓ = $ℓ")
-    results = runhemisimlite(n, dets, r, ℓ; center=(0, 0, 0))
+    @time results = runhemisimlite(n_sim, dets, r, ℓ; center=(0, 0, 0))
     res = view(results, :, 1) .& view(results, :, 2)
 
-    β = sum(res) / n
-    β_err = √(β * (1 - β) / n)
+    β = sum(res) / n_sim
+    β_err = √(β * (1 - β) / n_sim)
     # println("β = $β ± $β_err")
     rate = β * ℓ^2 * 2π / 3 * I₀
     rate_err = β_err * ℓ^2 * 2π / 3 * I₀
@@ -86,7 +83,7 @@ test_coverage2_hemisimlite()
 """
 Test for optimization.
 """
-function test_coverage3_hemisimlite(n::Int=1000000)
+function test_coverage3_hemisimlite(n_sim::Int=1000000)
     I₀ = 1
 
     # Construct two planar surfaces oriented at θ
@@ -100,7 +97,7 @@ function test_coverage3_hemisimlite(n::Int=1000000)
     r = 100
     ℓ = w * 2
     # println("r = $r, ℓ = $ℓ")
-    (results, dist_θ, dist_φ, angles) = runhemisimlite(n, dets, r, ℓ)
+    @time (results, dist_θ, dist_φ, angles) = runhemisimlite(n_sim, dets, r, ℓ)
     # println("dist_θ = $dist_θ, dist_φ = $dist_φ")
     angles = reshape(angles, 2, :)
     res = view(results, :, 1) .& view(results, :, 2)
@@ -117,7 +114,7 @@ function test_coverage3_hemisimlite(n::Int=1000000)
             β += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
         end
     end
-    β /= n
+    β /= n_sim
     # Calculate the variance
     σβ = 0
     for i in eachindex(res)
@@ -129,10 +126,10 @@ function test_coverage3_hemisimlite(n::Int=1000000)
             σβ += (β)^2
         end
     end
-    β_err = (√σβ) / n
+    β_err = (√σβ) / n_sim
     β *= ℓ^2
     β_err *= ℓ^2
-    println("β = $β ± $β_err")
+    # println("β = $β ± $β_err")
     rate = β * 2π / 3 * I₀
     rate_err = β_err * 2π / 3 * I₀
     expected_rate = w^2 * I₀ * cos(θ1)^2 * w^2 / d^2
@@ -147,7 +144,7 @@ test_coverage3_hemisimlite()
 """
 Test for optimization for the full simulation.
 """
-function test_coverage4_hemisim(n::Int=100000)
+function test_coverage4_hemisim(n_sim::Int=100000)
     I₀ = 58
 
     # Construct two planar surfaces oriented at θ
@@ -163,7 +160,7 @@ function test_coverage4_hemisim(n::Int=100000)
     r = d * 2
     ℓ = w * 2
     # println("r = $r, ℓ = $ℓ")
-    (results, _, _, dist_θ, dist_φ, angles) = runhemisim(n, dets, r, ℓ)
+    (results, _, _, dist_θ, dist_φ, angles) = runhemisim(n_sim, dets, r, ℓ)
     angles = reshape(angles, 2, :)
     res = view(results, :, 1) .& view(results, :, 2)
     # Importance sampling
@@ -175,7 +172,7 @@ function test_coverage4_hemisim(n::Int=100000)
             β += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
         end
     end
-    β /= n
+    β /= n_sim
     # Calculate the variance
     σβ = 0
     for i in eachindex(res)
@@ -187,7 +184,7 @@ function test_coverage4_hemisim(n::Int=100000)
             σβ += (β)^2
         end
     end
-    β_err = (√σβ) / n
+    β_err = (√σβ) / n_sim
     # println("β = $β ± $β_err")
     rate = β * ℓ^2 * 2π / 3 * I₀
     rate_err = β_err * ℓ^2 * 2π / 3 * I₀

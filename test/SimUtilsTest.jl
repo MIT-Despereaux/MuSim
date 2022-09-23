@@ -24,12 +24,12 @@ mkpath(OUT_DIR)
 """
 Integration test for the essential functions.
 """
-function test_runexp(n::Int=1000000)
+function test_runexp(n_sim::Int=1000000)
     # Construct two planar surfaces oriented at θ
-    w = 0.75
+    w = 0.8
     d = 1.0 # r distance between centers (on a sphere)
-    θ1 = 29.75π / 60
-    θ2 = θ1 + deg2rad(4)
+    θ1 = 15π / 60
+    θ2 = θ1 + deg2rad(2)
     box1 = RectBox("A", w, w, 0.1; orientation=(θ1, 0))
     box2 = RectBox("B", w, w, 0.1; position=(sin(θ1) * d, 0, cos(θ1) * d), orientation=(θ1, 0))
     box3 = RectBox("C", w, w, 0.1; position=(sin(θ2) * d * 1.2, 0, cos(θ2) * d * 1.2), orientation=(θ2, 0))
@@ -38,14 +38,14 @@ function test_runexp(n::Int=1000000)
     sim_configs = Dict{String,Any}[]
     # The list of tangent plane length for ray generation to scan over
     # Total number of simulations
-    config = Dict{String,Any}("sim_num" => n)
+    config = Dict{String,Any}("sim_num" => n_sim)
     # The radius of the hemisphere in [m]
     config["center"] = nothing
     config["detectors"] = dets
     push!(sim_configs, config)
 
     # Total number of simulations
-    config = Dict{String,Any}("sim_num" => n * 10)
+    config = Dict{String,Any}("sim_num" => n_sim * 10)
     # The radius of the hemisphere in [m]
     config["ℓ"] = 1.0
     config["r"] = 100
@@ -78,17 +78,17 @@ test_runexp()
 """
 Integration test for geometric factor errors.
 """
-function test_compose(n::Int=1000000)
-    w = 0.2
-    d = 0.5
+function test_compose(n_sim::Int=1000000)
+    w = 0.3
+    d = 0.25
     θ = deg2rad(43)
-    γ = deg2rad(138)
+    γ = deg2rad(125)
     box1 = RectBox("A", w, w, 0.1; orientation=(θ, 0))
-    box2 = RectBox("B", w, w, 0.1; position=(sin(θ) * d, 0, cos(θ) * d), orientation=(θ, 0))
+    box2 = RectBox("B", w, w, 0.1; position=(-sin(θ) * d, 0, cos(θ) * d), orientation=(θ, π))
     box3 = RectBox("C", w, w, 0.1; position=(sin(γ) * d, 0, cos(γ) * d), orientation=(γ, 0))
     dets = [box1, box2, box3]
 
-    config = Dict{String,Any}("sim_num" => n * 10)
+    config = Dict{String,Any}("sim_num" => n_sim * 10)
     config["detectors"] = dets
     config["center"] = (0, 0, 0)
     config["ℓ"] = 1.5
@@ -98,15 +98,40 @@ function test_compose(n::Int=1000000)
     βs1 = Dict(βs1)
     println("βs1 = $βs1")
 
-    βs2 = composeβ(OUT_DIR, dets, n)
+    (_, βs2) = composeβ(OUT_DIR, dets, n_sim)
     βs2 = Dict(βs2)
     println("βs2 = $βs2")
 
-    @test all(map(k -> ≈(βs1[k], βs2[k], rtol=0.05), collect(keys(βs1))))
+    @test all(map(k -> ≈(βs1[k], βs2[k], rtol=0.1), collect(keys(βs1))))
 end
 
 # %%
 test_compose()
+
+# %%
+"""
+Test for detector position sampling.
+"""
+function test_detpos(n_sim::Int=1000000)
+    w = 0.3
+    d = 0.25
+    θ = deg2rad(43)
+    γ = deg2rad(125)
+    box1 = RectBox("A", w, w, 0.1; orientation=(θ, 0))
+    box2 = RectBox("B", w, w, 0.1; position=(-sin(θ) * d, 0, cos(θ) * d), orientation=(θ, π))
+    box3 = RectBox("C", w, w, 0.1; position=(sin(γ) * d, 0, cos(γ) * d), orientation=(γ, 0))
+    dets = [box1, box2, box3]
+
+    gen_det_list = gendetectorpos(dets, 0.0001)
+    for det_list in gen_det_list
+        (cfg_hash, βs) = composeβ(OUT_DIR, det_list, n_sim)
+        println("config_hash: $cfg_hash")
+        println("βs = $βs")
+    end
+end
+
+# %%
+test_detpos()
 
 # %%
 end
