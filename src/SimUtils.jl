@@ -274,7 +274,7 @@ end
 
 """
 Runs the simulation in given configurations. 
-It scans over all the sim_configs. 
+It scans over all the "sim_configs". 
 The batch_size parameter denotes the number of simulations between caching,
 defaults to 1e6.
 The cached file blocks contain relevant metadata for the simulation 

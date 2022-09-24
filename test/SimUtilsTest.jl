@@ -24,7 +24,7 @@ mkpath(OUT_DIR)
 """
 Integration test for the essential functions.
 """
-function test_runexp(n_sim::Int=1000000)
+function test_runexp(n_sim::Int=Int(1e6))
     # Construct two planar surfaces oriented at θ
     w = 0.8
     d = 1.0 # r distance between centers (on a sphere)
@@ -78,7 +78,7 @@ test_runexp()
 """
 Integration test for geometric factor errors.
 """
-function test_compose(n_sim::Int=1000000)
+function test_compose(n_sim::Int=Int(1e6))
     w = 0.3
     d = 0.25
     θ = deg2rad(43)
@@ -110,9 +110,40 @@ test_compose()
 
 # %%
 """
+Integration test for geometric factor errors (realistic setup).
+"""
+function test_compose2(n_sim::Int=Int(1e6))
+    det_C = RectBox("C", 73e-3, 73e-3, 610e-3, position=(0.11, 0, -0.333), orientation=deg2rad.((90, 0)), efficiency=1.0, material="POP Doped Polystyrene")
+    det_CWD = RectBox("CWD", 0.01, 0.05, 0.05, position=(0.2282, 0, -0.3896), orientation=deg2rad.((90, 0)), efficiency=1.0, material="POP Doped Polystyrene")
+    det_D2 = RectBox("D2", 73e-3, 610e-3, 73e-3, position=(0.2282, 0, -0.443), orientation=deg2rad.((90, 0)), efficiency=1.0, material="POP Doped Polystyrene")
+
+    dets = [det_C, det_CWD, det_D2]
+
+    config = Dict{String,Any}("sim_num" => n_sim * 30)
+    config["detectors"] = dets
+    config["center"] = (0.11, 0, -0.333)
+    config["ℓ"] = 1.5
+    config["r"] = 100.0
+    res, sim_configs = runexp(OUT_DIR, [config])
+    βs1 = βio(OUT_DIR, res[1], sim_configs[1]; savefile=true)
+    βs1 = Dict(βs1)
+    println("βs1 = $βs1")
+
+    (_, βs2) = composeβ(OUT_DIR, dets, n_sim)
+    βs2 = Dict(βs2)
+    println("βs2 = $βs2")
+
+    @test all(map(k -> ≈(βs1[k], βs2[k], rtol=0.15), collect(keys(βs1))))
+end
+
+# %%
+test_compose2()
+
+# %%
+"""
 Test for detector position sampling.
 """
-function test_detpos(n_sim::Int=1000000)
+function test_detpos(n_sim::Int=Int(1e6))
     w = 0.3
     d = 0.25
     θ = deg2rad(43)
