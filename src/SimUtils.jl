@@ -474,9 +474,13 @@ function composeβ(output_dir, detectors::Vector{RectBox{T}}, n_sim::Int; overwr
             dets = circshift(detectors, -i)
             config["detectors"] = dets
             config["center"] = nothing
+            if i == length(detectors)
+                config["sim_num"] = n_sim * 10
+            end
             res, sim_configs = runexp(output_dir, [config])
             merge!(βs, βio(output_dir, res[1], sim_configs[1]))
         end
+        config["sim_num"] = n_sim
         for i in eachindex(detectors)
             dets = circshift(detectors, -i)
             config["detectors"] = dets
@@ -484,6 +488,9 @@ function composeβ(output_dir, detectors::Vector{RectBox{T}}, n_sim::Int; overwr
             ℓ, r = _get_ℓ_r(dets)
             config["ℓ"] = ℓ
             config["r"] = r
+            if i == length(detectors)
+                config["sim_num"] = n_sim * 10
+            end
             res, sim_configs = runexp(output_dir, [config])
             merge!(βs, βio(output_dir, res[1], sim_configs[1]; first_only=true))
         end
