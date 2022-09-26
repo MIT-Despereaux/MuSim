@@ -63,9 +63,11 @@ end
 Helper function that samples the detector positions in accordance of "fuzzy" detectors.
 "δr" is the 1σ position error.
 """
-function gendetectorpos(detectors::Vector{RectBox{T}}, δr::Real; n::Int=10, seed::Int=42) where {T<:Real}
+function gendetectorpos(detectors::Vector{RectBox{T}}, δr::Real; n::Int=10, seed::Union{Nothing,Int}=nothing) where {T<:Real}
     generated_detectors = []
-    Random.seed!(seed)
+    if seed !== nothing
+        Random.seed!(seed)
+    end
     for i in 1:n
         dets = deepcopy(detectors)
         for d in dets
