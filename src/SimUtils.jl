@@ -119,6 +119,7 @@ function runhemisim(n_sim::Int, detectors::Vector{T},
         @floop exec for i = 1:n_sim
             # Private mutable variables
             @init begin
+                ray = Ray(0.0, 0.0)
                 crosses = SortedDict{Float64,SVector{3,Float64}}()
                 hit_vec = falses(length(detectors))
                 i_vec = zeros(length(detectors))
@@ -138,7 +139,7 @@ function runhemisim(n_sim::Int, detectors::Vector{T},
                 θs = nothing
                 φs = nothing
             end
-            ray = Ray(R, center, ℓ; θ=θs, φ=φs)
+            modifyray!(ray, R, center, ℓ; θ=θs, φ=φs)
             # Loop through each dectector to fill the pre-allocated vectors
             for (j, d) in enumerate(detectors)
                 hit = isthrough!(ray, d, crosses)
@@ -224,6 +225,7 @@ function runhemisimlite(n_sim::Int, detectors::Vector{T},
         @floop exec for i = 1:n_sim
             # Private mutable variables
             @init begin
+                ray = Ray(0.0, 0.0)
                 crosses = SortedDict{Float64,SVector{3,Float64}}()
                 hit_vec = falses(length(detectors))
                 i_vec = zeros(length(detectors))
@@ -241,7 +243,7 @@ function runhemisimlite(n_sim::Int, detectors::Vector{T},
                 θs = nothing
                 φs = nothing
             end
-            ray = Ray(R, center, ℓ; θ=θs, φ=φs)
+            modifyray!(ray, R, center, ℓ; θ=θs, φ=φs)
             # Loop through each dectector to fill the pre-allocated vectors
             for (j, d) in enumerate(detectors)
                 hit = isthrough!(ray, d, crosses)

@@ -14,12 +14,20 @@ mkpath(CACHE_DIR)
 """
 A mutable ray object (just a line) that could go through multiple LabObjects.
 (θ, φ) denotes the unit direction vector, so (0, π) goes up.
+Note: This is only a demo for the use of @kwdef macro.
     """
-@kwdef struct Ray
-    azimuth_agl::Real # the angle θ in spherical coordinates in radian
-    polar_agl::Real # angle φ in spherical coordinates in radian
-    # coord z defaults to 100 m
-    start_position::SVector{3,Float64} = SA_F64[0, 0, 100]
+@kwdef mutable struct Ray{T<:Real}
+    azimuth::T # the angle θ in spherical coordinates in radian
+    polar::T # angle φ in spherical coordinates in radian
+    start_position::SVector{3,Float64} = SA_F64[0, 0, 0]
+end
+
+"""
+Convenience constructor.
+"""
+function Ray(θ::T, φ::U; start_pos::NTuple{3,<:Real}=(0, 0, 0)) where {T,U}
+    args = promote(θ, φ)
+    return Ray(azimuth=args[1], polar=args[2], start_position=SA_F64[start_pos...])
 end
 
 
@@ -61,7 +69,8 @@ _randsin() = acos(1 - 2rand())
 μ_dist_cache_file = joinpath(CACHE_DIR, μ_dist_cache_fname * ".jld2")
 μ_dist_cache = Float64[]
 if !isfile(μ_dist_cache_file)
-    save(μ_dist_cache_file, μ_dist_cache_fname, μ_dist_cache)
+    println("Generating cache...")
+    # save(μ_dist_cache_file, μ_dist_cache_fname, μ_dist_cache)
 else
     println("Loading cache...")
     μ_dist_cache = load(μ_dist_cache_file, μ_dist_cache_fname)
@@ -122,11 +131,11 @@ end
 
 # For optional constructors, it's best to keep the required fields before keywords, and use keywords for optional fields
 """
-Randomly generate a ray with start uniform x, y ∈ (-max_x, max_x) U (-max_y, max_y), with max_bounds = (max_x, max_y)
+Randomly modifies a ray with start uniform x, y ∈ (-max_x, max_x) U (-max_y, max_y), with max_bounds = (max_x, max_y)
 The center is given as a tuple.
 If not given, the θ and φ are drawn from cos³sin and uniform distributions respectively.
 """
-function Ray(max_bounds::NTuple{2,Real}, center::NTuple{3,Real}; θ=nothing, φ=nothing)
+function modifyray!(r::Ray{<:Real}, max_bounds::NTuple{2,Real}, center::NTuple{3,Real}; θ::Union{Nothing,Real}=nothing, φ::Union{Nothing,Real}=nothing)::Nothing
     x = rand() * 2max_bounds[1] - max_bounds[1] + center[1]
     y = rand() * 2max_bounds[2] - max_bounds[2] + center[2]
     if θ === nothing
@@ -134,50 +143,48 @@ function Ray(max_bounds::NTuple{2,Real}, center::NTuple{3,Real}; θ=nothing, φ=
         θ = _randcos3()
     end
     if φ === nothing
-        φ = rand() * 2pi
+        φ = rand() * 2π
     end
-    return Ray(azimuth_agl=θ, polar_agl=φ, start_position=SA_F64[x, y, center[3]])
+    r.azimuth = θ
+    r.polar = φ
+    r.start_position = SA_F64[x, y, center[3]]
+    return nothing
 end
 
 
 """
-Randomly generate a ray on the upper hemisphere with radius R. The direction is along the normal vector.
+Randomly modifies a ray on the upper hemisphere with radius R. The direction is along the normal vector.
 See http://arxiv.org/abs/1912.05462.
 """
-function Ray(R::Real, center::NTuple{3,Real}, side_len::Real;
-    θ::Union{Nothing,Real}=nothing, φ::Union{Nothing,Real}=nothing)
+function modifyray!(r::Ray{<:Real}, R::Real, center::NTuple{3,Real}, ℓ::Real;
+    θ::Union{Nothing,Real}=nothing, φ::Union{Nothing,Real}=nothing)::Nothing
     if θ === nothing
         # Generate by the distribution
-        θs = _randcos2()
-    else
-        θs = θ
+        θ = _randcos2()
     end
     if φ === nothing
-        φs = rand() * 2pi
-    else
-        φs = φ
+        φ = rand() * 2π
     end
-    start_θ = pi - θs
-    start_φ = φs + pi
-    (x, y, z) = SA_F64[sin(start_θ)*cos(start_φ), sin(start_θ)*sin(start_φ), cos(start_θ)] * R
-    (a, b) = rand(2) * side_len .- side_len / 2
-    θ_hat = SA_F64[cos(θs)*cos(φs), cos(θs)*sin(φs), -sin(θs)]
-    φ_hat = SA_F64[-sin(φs), cos(φs), 0]
-    (dx, dy, dz) = a * θ_hat + b * φ_hat
-    x += center[1] + dx
-    y += center[2] + dy
-    z += center[3] + dz
-    return Ray(azimuth_agl=θs, polar_agl=φs, start_position=SA_F64[x, y, z])
+    start_θ = π - θ
+    start_φ = φ + π
+    x_vec = SA_F64[sin(start_θ)*cos(start_φ), sin(start_θ)*sin(start_φ), cos(start_θ)] * R
+    (a, b) = rand(2) * ℓ .- ℓ / 2
+    θ_hat = SA_F64[cos(θ)*cos(φ), cos(θ)*sin(φ), -sin(θ)]
+    φ_hat = SA_F64[-sin(φ), cos(φ), 0]
+    dx_vec = a * θ_hat + b * φ_hat
+    x_vec += (dx_vec + (center |> SVector))
+    r.azimuth = θ
+    r.polar = φ
+    r.start_position = x_vec
+    return nothing
 end
 
 
 """
 Returns the direction vector in Cartesian coordinates.
 """
-function raydir(r::Ray)::SVector{3,Float64}
-    θ = r.azimuth_agl
-    φ = r.polar_agl
-    return _unitsph2cart(θ, φ)
+function raydir(r::Ray{<:Real})::SVector{3,Float64}
+    return _unitsph2cart(r.azimuth, r.polar)
 end
 
 
@@ -195,26 +202,3 @@ function rayplaneint(dir::SVector{3,Float64}, r_pos::SVector{3,Float64}, plane_n
         return tup
     end
 end
-
-### Scratch
-# Adds the energy
-# cache_file = joinpath(OUT_DIR, "muon_en_dist_cache.pkl")
-# cache = Float64[]
-# if isfile(cache_file)
-#     d = read_pickle(cache_file)
-#     append!(cache, values(d))
-# end
-
-# muon_en = Vector{Any}(undef, length(ℓ_list))
-# for (i, ℓ) in enumerate(ℓ_list)
-#     dir = ray_dirs[i]
-#     μe = [Dict{Int,Float64}() for i = 1:length(dir)]
-#     for j = 1:length(dir)
-#         for (k, v) in dir[j]
-#             μe[j][k] = μenergy!(v[1], cache = cache)
-#         end
-#     end
-#     muon_en[i] = μe
-# end
-# d = pd.Series(cache)
-# d.to_pickle(cache_file)
