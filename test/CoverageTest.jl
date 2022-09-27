@@ -63,7 +63,7 @@ function test_coverage2_hemisimlite(n_sim::Int=1000000)
     r = d * 2
     ℓ = w * 2
     # println("r = $r, ℓ = $ℓ")
-    results = runhemisimlite(n_sim, dets, r, ℓ; center=(0, 0, 0))
+    @time results = runhemisimlite(n_sim, dets, r, ℓ; center=(0, 0, 0))
     res = view(results, :, 1) .& view(results, :, 2)
 
     β = sum(res) / n_sim
@@ -72,9 +72,9 @@ function test_coverage2_hemisimlite(n_sim::Int=1000000)
     rate = β * ℓ^2 * 2π / 3 * I₀
     rate_err = β_err * ℓ^2 * 2π / 3 * I₀
     expected_rate = w^2 * I₀ * cos(θ)^2 * w^2 / d^2
-    println("rate = $rate ± $rate_err")
-    println("expected rate = $expected_rate")
-    # @test rate ≈ expected_rate atol = 2rate_err
+    # println("rate = $rate ± $rate_err")
+    # println("expected rate = $expected_rate")
+    @test rate ≈ expected_rate atol = 2rate_err
 end
 
 test_coverage2_hemisimlite()

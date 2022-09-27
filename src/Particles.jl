@@ -19,7 +19,7 @@ Note: This is only a demo for the use of @kwdef macro.
 @kwdef mutable struct Ray{T<:Real}
     azimuth::T # the angle θ in spherical coordinates in radian
     polar::T # angle φ in spherical coordinates in radian
-    start_position::SVector{3,Float64} = SA_F64[0, 0, 0]
+    start_position::MVector{3,Float64} = @MVector [0, 0, 0]
 end
 
 """
@@ -27,7 +27,7 @@ Convenience constructor.
 """
 function Ray(θ::T, φ::U; start_pos::NTuple{3,<:Real}=(0, 0, 0)) where {T,U}
     args = promote(θ, φ)
-    return Ray(azimuth=args[1], polar=args[2], start_position=SA_F64[start_pos...])
+    return Ray(azimuth=args[1], polar=args[2], start_position=MVector{3,Float64}(start_pos))
 end
 
 
@@ -147,7 +147,7 @@ function modifyray!(r::Ray{<:Real}, max_bounds::NTuple{2,Real}, center::NTuple{3
     end
     r.azimuth = θ
     r.polar = φ
-    r.start_position = SA_F64[x, y, center[3]]
+    (r.start_position.x, r.start_position.y, r.start_position.z) = (x, y, center[3])
     return nothing
 end
 
@@ -168,14 +168,14 @@ function modifyray!(r::Ray{<:Real}, R::Real, center::NTuple{3,Real}, ℓ::Real;
     start_θ = π - θ
     start_φ = φ + π
     x_vec = SA_F64[sin(start_θ)*cos(start_φ), sin(start_θ)*sin(start_φ), cos(start_θ)] * R
-    (a, b) = rand(2) * ℓ .- ℓ / 2
+    pos = (@SVector(rand(2)) * ℓ) .- ℓ / 2
     θ_hat = SA_F64[cos(θ)*cos(φ), cos(θ)*sin(φ), -sin(θ)]
     φ_hat = SA_F64[-sin(φ), cos(φ), 0]
-    dx_vec = a * θ_hat + b * φ_hat
+    dx_vec = pos[1] * θ_hat + pos[2] * φ_hat
     x_vec += (dx_vec + (center |> SVector))
     r.azimuth = θ
     r.polar = φ
-    r.start_position = x_vec
+    (r.start_position.x, r.start_position.y, r.start_position.z) = (x_vec.x, x_vec.y, x_vec.z)
     return nothing
 end
 

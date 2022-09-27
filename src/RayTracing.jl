@@ -196,7 +196,7 @@ function _cart2unitsph(x::Real, y::Real, z::Real)::SVector{2,Float64}
 end
 
 
-function _translate(v::SVector{3,Float64}, Δx::SVector{3,Float64})::SVector{3,Float64}
+function _translate(v::Union{SVector{3,Float64},MVector{3,Float64}}, Δx::SVector{3,Float64})::SVector{3,Float64}
     return v + Δx
 end
 
