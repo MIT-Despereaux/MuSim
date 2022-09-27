@@ -45,7 +45,7 @@ function test_runexp(n_sim::Int=Int(1e6))
     push!(sim_configs, config)
 
     # Total number of simulations
-    config = Dict{String,Any}("sim_num" => n_sim * 10)
+    config = Dict{String,Any}("sim_num" => n_sim * 30)
     # The radius of the hemisphere in [m]
     config["ℓ"] = 1.0
     config["r"] = 100
