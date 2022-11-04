@@ -150,7 +150,7 @@ function runhemisim(n_sim::Int, detectors::Vector{T},
                     points = hcat(values(crosses)...)'
                     # Note the points are vertically concatenated
                     crx[j] = Dict(i => points)
-                    dir[j] = Dict(i => Float64[ray.azimuth_agl, ray.polar_agl])
+                    dir[j] = Dict(i => Float64[ray.azimuth, ray.polar])
                     empty!(crosses)
                 end
             end
@@ -440,12 +440,16 @@ function βio(output_dir, res, config; savefile=false, overwrite=false, first_on
             sort!(c)
             # join(β, delim) for concatenation
             if optimize && detectors[1].name ∉ c
+                println("Skipped due to optimize!")
                 continue
             end
-            if first_only && detectors[1].name != c
+            if first_only && [detectors[1].name] != c
+                println("Skipped due to first_only!")
                 continue
             end
             (inclusive_β, exclusive_β) = calculateβ(det_order, res, c, optimize)
+            # println("Inclusive beta: $(inclusive_β)")
+            # println("Exclusive beta: $(exclusive_β)")
             geo_factors["inc_beta_$(join(c, "_"))"] = inclusive_β * config["ℓ"]^2
             geo_factors["exc_beta_$(join(c, "_"))"] = exclusive_β * config["ℓ"]^2
         end
@@ -462,7 +466,7 @@ end
 Compose the simulation assuming the first "detector" is the chip.
 This function aims to output the "correct" geometric factor.
 """
-function composeβ(output_dir, detectors::Vector{RectBox{T}}, n_sim::Int; overwrite=false) where {T<:Real}
+function composeβ(output_dir, detectors::Vector{RectBox{T}}, n_sim::Int; overwrite=false, include_chip=true) where {T<:Real}
     config = Dict{String,Any}("sim_num" => n_sim)
     config["detectors"] = detectors
     config_hash = hash(config)
@@ -478,8 +482,10 @@ function composeβ(output_dir, detectors::Vector{RectBox{T}}, n_sim::Int; overwr
             dets = circshift(detectors, -i)
             config["detectors"] = dets
             config["center"] = nothing
-            if i == length(detectors)
-                config["sim_num"] = n_sim * 10
+            if include_chip
+                if i == length(detectors)
+                    config["sim_num"] = n_sim * 10
+                end
             end
             res, sim_configs = runexp(output_dir, [config])
             merge!(βs, βio(output_dir, res[1], sim_configs[1]))
@@ -492,14 +498,18 @@ function composeβ(output_dir, detectors::Vector{RectBox{T}}, n_sim::Int; overwr
             ℓ, r = _get_ℓ_r(dets)
             config["ℓ"] = ℓ
             config["r"] = r
-            if i == length(detectors)
-                config["sim_num"] = n_sim * 10
+            if include_chip
+                if i == length(detectors)
+                    config["sim_num"] = n_sim * 10
+                end
             end
             res, sim_configs = runexp(output_dir, [config])
             merge!(βs, βio(output_dir, res[1], sim_configs[1]; first_only=true))
         end
     end
     βs = sort(collect(βs), by=x -> x[1])
+    println("Saving βs to $(f_name)...")
+    println("βs: $(βs)")
     CSV.write(f_name, βs)
     return (config_hash, βs)
 end
