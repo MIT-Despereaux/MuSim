@@ -438,6 +438,7 @@ function βio(output_dir, res, config; savefile=false, overwrite=false, first_on
         combs = combinations(collect(keys(det_order)))
         for c in combs
             sort!(c)
+            println("Current comb: $(c)")
             # join(β, delim) for concatenation
             if optimize && detectors[1].name ∉ c
                 println("Skipped due to optimize!")
