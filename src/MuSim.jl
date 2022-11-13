@@ -12,6 +12,6 @@ include("RayTracing.jl")
 export LabObject, RectBox, Sphere, Cylinder, isthrough!, objorient
 
 include("SimUtils.jl")
-export gendetectorpos, runhemisim, runhemisimlite, runexp, calculateβ, βio, composeβ
+export gendetectorpos, runhemisim, runhemisimlite, runexp, calculateβ, βio, composeβ, expio
 
 end

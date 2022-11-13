@@ -516,109 +516,74 @@ function composeβ(output_dir, detectors::Vector{RectBox{T}}, n_sim::Int; overwr
 end
 
 
-# """
-# Helper function that copies the detector setup.
-# """
-# function copydets(detectors::Vector{T}, n_copies::Int) where {T<:LabObject{<:Real}}
-#     dets = []
-#     for i in 1:n_copies
-#         for (j, d) in enumerate(detectors)
-#             idx = length(detectors) * (i - 1) + j
-#             new_det = deepcopy(d)
-#             # Rotate the detector by the correct angle
-#             angle = 2pi / n_copies * (i - 1)
-#             pos = new_det.position
-#             ori_end = pos + objorient(new_det)
-#             new_pos = _rotate(pos, 0, angle, 0)
-#             new_ori_end = _rotate(ori_end, 0, angle, 0)
-#             new_ori = new_ori_end - new_pos
-#             new_det.position = new_pos
-#             new_det.orientation = _cart2unitsph(new_ori...)
-#             push!(dets, new_det)
-#         end
-#     end
-#     dets = Vector{LabObject{<:Real}}(dets)
-#     return dets
-# end
+"""
+This function saves simulation outputs to jld2 files.
+Names of the files are sim_res, sim_crx, sim_dirs, etc.
+Overwrite controls whether to overwrite existing data.
+"""
+function expio(output_dir, config; overwrite=false, res=nothing, crx=nothing, dirs=nothing)
+    config_hash = hash(config)
+    println("Config hash: $(config_hash)")
+    # Construct the metadata
+    metadata = ""
+    metadata *= "Simulation Configurations:\n"
+    detector_names = String[]
+    for (k, v) in config
+        if k == "detectors"
+            for d in v
+                metadata *= sprint(show, d)
+                metadata *= repeat("-", 50)
+                metadata *= "\n"
+                push!(detector_names, "$(d.name)")
+            end
+        else
+            metadata *= "$k -> $v \n"
+        end
+    end
+    println(metadata)
 
+    sim_res = Dict{String,Any}()
+    if res !== nothing
+        println(res)
+        f_name = joinpath(output_dir, "sim_res_H$(config_hash).jld2")
+        if isfile(f_name) && !overwrite
+            println("$(f_name) found, loading...")
+            @load f_name res
+        else
+            @save f_name res
+        end
+        sim_res["sim_res"] = res
+    end
 
-# """
-# This function converts the simulation results to DataFrame and saves it as pkl files.
-# Names of the files are sim_res, sim_crx, sim_dirs, etc.
-# Overwrite controls whether to overwrite existing data.
-# The function reads the files on disk if they are already there and returns
-# a dictionary containing the DataFrames.
-# """
-# function expio(output_dir, detectors, config; overwrite=false, res=nothing, crx=nothing, dirs=nothing)
-#     config_hash = hash(config)
-#     println("Config hash: $(config_hash)")
-#     # Construct the metadata
-#     metadata = "Total number of simulations: $(size(res)[1])\n"
-#     n_copies = size(res)[2] ÷ length(detectors)
-#     metadata *= "# of copies: $(n_copies)\n"
-#     metadata *= "Simulation Configurations:\n"
-#     detector_names = String[]
-#     for (k, v) in config
-#         if k == "detectors"
-#             for grp in 1:n_copies
-#                 for d in v
-#                     metadata *= sprint(show, d)
-#                     metadata *= repeat("-", 50)
-#                     metadata *= "\n"
-#                     push!(detector_names, "$(d.name)_copy$(grp)")
-#                 end
-#             end
-#         else
-#             metadata *= "$k -> $v \n"
-#         end
-#     end
-#     println(metadata)
+    if crx !== nothing
+        f_name = joinpath(output_dir, "sim_crx_H$(config_hash).jld2")
+        if isfile(f_name) && !overwrite
+            println("$(f_name) found, loading...")
+            @load f_name crx
+        else
+            @save f_name crx
+        end
+        sim_res["sim_crx"] = crx
+    end
 
-#     sim_res = Dict{String,Any}()
-#     # Construct the DataFrames and sort in place
-#     if res !== nothing
-#         f_name = joinpath(output_dir, "sim_res_H$(config_hash).jld2")
-#         if isfile(f_name) && !overwrite
-#             println("$(f_name) found, loading...")
-#             @load f_name res
-#         else
-#             @save f_name res
-#         end
-#         sim_res["sim_res"] = res
-#     end
+    if dirs !== nothing
+        f_name = joinpath(output_dir, "sim_dirs_H$(config_hash).jld2")
+        if isfile(f_name) && !overwrite
+            println("$(f_name) found, loading...")
+            @load f_name dirs
+        else
+            @save f_name dirs
+        end
+        sim_res["sim_dirs"] = dirs
+    end
 
-#     if crx !== nothing
-#         f_name = joinpath(output_dir, "sim_crx_H$(config_hash).jld2")
-#         if isfile(f_name) && !overwrite
-#             println("$(f_name) found, loading...")
-#             @load f_name crx
-#         else
-#             @save f_name crx
-#         end
-#         sim_res["sim_crx"] = crx
-#     end
+    # Save the metadata to disk
+    f_name = joinpath(output_dir, "metadata_H$(config_hash).txt")
+    if !isfile(f_name) || overwrite
+        open(f_name, "w") do io
+            write(io, metadata)
+        end
+    end
 
-#     if dirs !== nothing
-#         f_name = joinpath(output_dir, "sim_dirs_H$(config_hash).jld2")
-#         if isfile(f_name) && !overwrite
-#             println("$(f_name) found, loading...")
-#             @load f_name dirs
-#         else
-#             @save f_name dirs
-#         end
-#         sim_res["sim_dirs"] = dirs
-#     end
-
-#     # Save the metadata and config to disk
-#     # Convert the dict to python dict
-#     py_config = Dict{String,Any}(config)
-#     # Deletes unsupported PyObject entry
-#     pop!(py_config, "detectors")
-#     # Open a python IO and save
-#     f_name = joinpath(OUT_DIR, "config_H$(config_hash).pkl")
-#     @py pickle.dump(py_config, open(f_name, "wb"))
-#     open(joinpath(OUT_DIR, "metadata_H$(config_hash).txt"), "w") do io
-#         write(io, metadata)
-#     end
-#     return sim_res
-# end
+    return sim_res
+end
