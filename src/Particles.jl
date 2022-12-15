@@ -65,25 +65,25 @@ Generates the uniform distribution on the sphere for variable θ. f(θ) = sin(θ
 """
 _randsin() = acos(1 - 2rand())
 
-μ_dist_cache_fname = "mu_spawn_dist"
-μ_dist_cache_file = joinpath(CACHE_DIR, μ_dist_cache_fname * ".jld2")
-μ_dist_cache = Float64[]
-if !isfile(μ_dist_cache_file)
-    println("Generating cache...")
-    # save(μ_dist_cache_file, μ_dist_cache_fname, μ_dist_cache)
-else
-    println("Loading cache...")
-    μ_dist_cache = load(μ_dist_cache_file, μ_dist_cache_fname)
-end
-"""
-Generates the muon energy given its ray angle.
-Note currently the energy distribution is completely independent of the angle distribution.
-"""
-function μenergy!(θ::Real)
-    sample = unisampler!(x -> μpdf(x, θ=π - θ), low_bound=1.0, upp_bound=100, cache=μ_dist_cache)
-    save(μ_dist_cache_file, μ_dist_cache_fname, μ_dist_cache)
-    return sample
-end
+# μ_dist_cache_fname = "mu_spawn_dist"
+# μ_dist_cache_file = joinpath(CACHE_DIR, μ_dist_cache_fname * ".jld2")
+# μ_dist_cache = Float64[]
+# if !isfile(μ_dist_cache_file)
+#     println("Generating cache...")
+#     # save(μ_dist_cache_file, μ_dist_cache_fname, μ_dist_cache)
+# else
+#     println("Loading cache...")
+#     μ_dist_cache = load(μ_dist_cache_file, μ_dist_cache_fname)
+# end
+# """
+# Generates the muon energy given its ray angle.
+# Note currently the energy distribution is completely independent of the angle distribution.
+# """
+# function μenergy!(θ::Real)
+#     sample = unisampler!(x -> μpdf(x, θ=π - θ), low_bound=1.0, upp_bound=100, cache=μ_dist_cache)
+#     save(μ_dist_cache_file, μ_dist_cache_fname, μ_dist_cache)
+#     return sample
+# end
 
 
 """

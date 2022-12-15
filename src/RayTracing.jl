@@ -6,6 +6,7 @@ using LinearAlgebra
 using Printf
 using StaticArrays
 using DataStructures
+using HCubature
 
 
 # Abstract lab object that can be used in coincidence
@@ -230,6 +231,36 @@ function _rotate(v::SVector{3,Float64}, θ₁::Real, φ::Real, θ₂::Real)
     end
     new_v = mat_θ2 * mat_φ * mat_θ1 * v
     return new_v
+end
+
+"""
+Solid angle factor for a single side of a box.
+"""
+function _fΩ(θ)
+    dΩ = x -> abs(cos(x[1]) * cos(θ) + cos(x[2]) * sin(x[1]) * sin(θ)) * cos(x[1])^2 * sin(x[1])
+    res, _ = hcubature(dΩ, (0, 0), (π / 2, 2π), rtol=1e-6)
+    return res
+end
+
+"""
+Calculates the analytic rate of a box, given the parameters.
+"""
+function analytic_R(box::RectBox; I₀::Real=1)::Real
+    # Find the orientations of three sides
+    θ₁ = box.orientation[1]
+    φ = box.orientation[2]
+    x̂ = _rotate(SA_F64[1, 0, 0], θ₁, φ, 0)
+    ŷ = _rotate(SA_F64[0, 1, 0], θ₁, φ, 0)
+    ẑ = _rotate(SA_F64[0, 0, 1], θ₁, φ, 0)
+    R = 0
+    # Calculate the flux for each side
+    θx = _cart2unitsph(x̂...)[1]
+    θy = _cart2unitsph(ŷ...)[1]
+    θz = _cart2unitsph(ẑ...)[1]
+    R += _fΩ(θx) * (box.delta_y * box.delta_z) * I₀
+    R += _fΩ(θy) * (box.delta_x * box.delta_z) * I₀
+    R += _fΩ(θz) * (box.delta_x * box.delta_y) * I₀
+    return R * box.efficiency
 end
 
 

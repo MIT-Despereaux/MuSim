@@ -20,17 +20,19 @@ using Distributions, FLoops
 """
 Test for basic coverage of one box. Returns beta and beta_err multiplied by simulation ℓ^2.
 """
-function test_coverage1_hemisimlite(n_sim::Int=50000)
+function test_coverage1_hemisimlite(n_sim::Int=500000)
     I₀ = 58
-    (x, y, z) = (1, 2, 3)
-    expected_rate = (x * y * π / 2 + 2 * x * z * π / 8 + 2 * y * z * π / 8) * I₀
+    (x, y, z) = (1.2, 1.9, 2.2)
+    ori = deg2rad.((45.0, 112.5))
 
     # Construct a X x Y x Z box (unit m)
-    box = [RectBox("A", x, y, z)]
+    box = [RectBox("A", x, y, z, orientation=ori)]
     r = max(x, y, z) * 3
-    ℓ = max(x * y, x * z, y * z) * 2
+    ℓ = max(x * y, x * z, y * z) * 1.75
     # println("r = $r, ℓ = $ℓ")
     results = runhemisimlite(n_sim, box, r, ℓ; center=(0, 0, 0))
+
+    expected_rate = analytic_R(box[1], I₀=I₀)
 
     β = sum(results) / n_sim
     β_err = √(β * (1 - β) / n_sim)
