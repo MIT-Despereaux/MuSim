@@ -192,7 +192,11 @@ Runs the simulation with a hemispherical generating surface, outputting only the
     """
 function runhemisimlite(n_sim::Int, detectors::Vector{T},
     R::Real, ℓ::Real;
-    exec=ThreadedEx(), center::Union{NTuple{3,Real},Nothing}=nothing) where {T<:LabObject{<:Real}}
+    exec=ThreadedEx(),
+    center::NTuple{3,Real}=(0, 0, 0),
+    dist_θ=nothing,
+    dist_φ=nothing
+) where {T<:LabObject{<:Real}}
     if center === nothing
         center = detectors[1].position |> Tuple
         # println("Center: ", center)

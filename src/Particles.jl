@@ -119,6 +119,23 @@ end
 
 
 """
+A sampler for an arbitrary univariate distribution using its cdf.
+"""
+function unisamplercdf!(ecdf; low_bound=-Inf, upp_bound=Inf, cache=nothing, cache_size=Int(1e5))
+    if cache !== nothing && length(cache) > cache_size
+        return rand(cache)
+    end
+    x = rand()
+    eqn = y -> ecdf(y) - x
+    res = find_zero(eqn, (low_bound, upp_bound), A42())
+    if cache !== nothing
+        push!(cache, res)
+    end
+    return res
+end
+
+
+"""
 Return the cdf of a univariate distribution. Note this is not normalized.
 """
 function unicdf(f::Function, x::Real; low_bound=-Inf, upp_bound=Inf, total=1.0)
