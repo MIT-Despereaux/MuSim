@@ -194,6 +194,56 @@ function test_coverage4_hemisim(n_sim::Int=100000)
 end
 
 
+function setup_geometry()
+    hL = 70e-3
+    dL = 70e-3
+    lenL = 600e-3
+
+    hS = 20e-3
+    dS = 72e-3
+    lenS = 510e-3
+
+    hCW = 10e-3
+    dCW = 50e-3
+    lenCW = 50e-3
+    hhCW = 30e-3 # height of the scintillator from the bottom
+
+    gCB = 8e-3
+    gBD = 11e-3
+    gDA = 6e-3
+
+    (xC, yC, zC) = (0.625, 0.220, 0.8682)
+
+    zB = zC + hL / 2 + gCB + hS / 2
+    zD = zB + hS / 2 + gBD + hL / 2
+    zA = zD + hL / 2 + gDA + hS / 2
+    zCW = zC + hL / 2 + hhCW
+
+    xL = xC
+    xS = xC - lenL / 2 + lenS / 2
+    xCW = xS + lenS / 2 + lenCW / 2 + 0.002
+
+
+    loc_det_C = (xL, yC, zC)
+    loc_det_B = (xS, yC, zB)
+    loc_det_D = (xL, yC, zD)
+    loc_det_A = (xS, yC, zA)
+    loc_det_CWD = (xCW, yC, zCW)
+
+    loc_Chip = (0.338, 0.229, 1.4148)
+
+    det_CWD = RectBox("CWD", lenCW, dCW, hCW, position=loc_det_CWD, material="POP Doped Polystyrene")
+    det_A = RectBox("A", lenS, dS, hS, position=loc_det_A, material="EJ-200")
+    det_D = RectBox("D", lenL, dL, hL, position=loc_det_D, material="EJ-200")
+    det_B = RectBox("B", lenS, dS, hS, position=loc_det_B, material="EJ-200")
+    det_C = RectBox("C", lenL, dL, hL, position=loc_det_C, material="EJ-200")
+    det_Chip = RectBox("Chip", 350e-6, 0.005, 0.005, position=loc_Chip, material="Unknown")
+
+    detectors = [det_A, det_B, det_C, det_D, det_CWD, det_Chip]
+    return detectors
+end
+
+
 function main()
     initrand()
     test_coverage1_hemisimlite()
