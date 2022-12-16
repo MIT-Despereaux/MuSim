@@ -3,9 +3,11 @@
 module SimUtilsTest
 
 # %%
-include(joinpath(dirname(@__FILE__), "testutils.jl"))
+include("testutils.jl")
 
 using Test
+# using Infiltrator
+
 # The following code is necessary to fix VSCode julia local module linting
 if isdefined(@__MODULE__, :LanguageServer)
     include("../src/MuSim.jl")
@@ -13,12 +15,9 @@ if isdefined(@__MODULE__, :LanguageServer)
 else
     using MuSim
 end
+
 using JLD2
 
-# %%
-OUT_DIR = abspath(joinpath(dirname(@__FILE__), "test_cache"))
-println(OUT_DIR)
-mkpath(OUT_DIR)
 
 # %%
 """
@@ -71,10 +70,7 @@ function test_runexp(n_sim::Int=Int(1e6))
     @test all(.≈(res1, res2, rtol=0.1))
 end
 
-# %%
-test_runexp()
 
-# %%
 """
 Integration test for geometric factor errors.
 """
@@ -105,10 +101,7 @@ function test_compose(n_sim::Int=Int(1e6))
     @test all(map(k -> ≈(βs1[k], βs2[k], rtol=0.1), collect(keys(βs1))))
 end
 
-# %%
-test_compose()
 
-# %%
 """
 Integration test for geometric factor errors (realistic setup).
 """
@@ -136,10 +129,7 @@ function test_compose2(n_sim::Int=Int(1e6))
     @test all(map(k -> ≈(βs1[k], βs2[k], rtol=0.15), collect(keys(βs1))))
 end
 
-# %%
-test_compose2()
 
-# %%
 """
 Test for detector position sampling.
 """
@@ -161,8 +151,17 @@ function test_detpos(n_sim::Int=Int(1e6))
     end
 end
 
-# %%
-test_detpos()
 
-# %%
+function main()
+    initrand()
+    OUT_DIR = abspath(joinpath(dirname(@__FILE__), "test_cache"))
+    println(OUT_DIR)
+    mkpath(OUT_DIR)
+
+    test_runexp()
+    test_compose()
+    test_compose2()
+    test_detpos()
+end
+
 end

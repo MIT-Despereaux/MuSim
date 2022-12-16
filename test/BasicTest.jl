@@ -3,9 +3,11 @@
 module BasicTest
 
 # %%
-include(joinpath(dirname(@__FILE__), "testutils.jl"))
+include("testutils.jl")
 
 using Test
+# using Infiltrator
+
 # The following code is necessary to fix VSCode julia local module linting
 if isdefined(@__MODULE__, :LanguageServer)
     include("../src/MuSim.jl")
@@ -69,14 +71,15 @@ function test_relativedir()
     @test all(.≈(_relativedir(box1, box2), (0, 0, atan(2 / (2√2 - 1)), 5π / 3), atol=2e-3))
 end
 
+function main()
+    test_rectboxhash()
+    test_rectboxequal()
+    test_sphereequal()
+    test_cylinderequal()
+    test_cart2unitsph()
+    test_relativedir()
+end
 
-# %%
-test_rectboxhash()
-test_rectboxequal()
-test_sphereequal()
-test_cylinderequal()
-test_cart2unitsph()
-test_relativedir()
+!isinteractive() && main()
 
-# %%
 end # module

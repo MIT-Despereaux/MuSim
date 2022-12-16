@@ -3,9 +3,11 @@
 module DistributionTest
 
 # %%
-include(joinpath(dirname(@__FILE__), "testutils.jl"))
+include("testutils.jl")
 
 using Test
+# using Infiltrator
+
 # The following code is necessary to fix VSCode julia local module linting
 if isdefined(@__MODULE__, :LanguageServer)
     include("../src/MuSim.jl")
@@ -13,11 +15,13 @@ if isdefined(@__MODULE__, :LanguageServer)
 else
     using MuSim
 end
-using StatsBase
 
 # Submodules
 # Note: Use explicit import when needed
 import MuSim: _randcos2, _randcos3
+
+using StatsBase
+
 
 # %%
 """
@@ -36,14 +40,17 @@ function test_θdist(dist::Function, expected::Function, l_bound::Real, u_bound:
     return (bin_centers, counts, errs, expected_counts)
 end
 
-# %%
-# Test drawing from a custom distribution
-expected_f = x -> @. abs(3cos(x)^2 * sin(x))
-(_, counts, errs, expected) = test_θdist(_randcos2, expected_f, π / 2, π)
-@test all(counts - 3.5errs <= expected <= counts + 3.5errs)
-expected_f = x -> @. abs(4cos(x)^3 * sin(x))
-(_, counts, errs, expected) = test_θdist(_randcos3, expected_f, π / 2, π)
-@test all(counts - 3.5errs <= expected <= counts + 3.5errs)
+function main()
+    initrand()
+    # Test drawing from a custom distribution
+    expected_f = x -> @. abs(3cos(x)^2 * sin(x))
+    (_, counts, errs, expected) = test_θdist(_randcos2, expected_f, π / 2, π)
+    @test all(counts - 3.5errs <= expected <= counts + 3.5errs)
+    expected_f = x -> @. abs(4cos(x)^3 * sin(x))
+    (_, counts, errs, expected) = test_θdist(_randcos3, expected_f, π / 2, π)
+    @test all(counts - 3.5errs <= expected <= counts + 3.5errs)
+end
 
-# %%
+!isinteractive() && main()
+
 end # module

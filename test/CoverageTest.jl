@@ -3,9 +3,11 @@
 module CoverageTest
 
 # %%
-include(joinpath(dirname(@__FILE__), "testutils.jl"))
+include("testutils.jl")
 
 using Test
+# using Infiltrator
+
 # The following code is necessary to fix VSCode julia local module linting
 if isdefined(@__MODULE__, :LanguageServer)
     include("../src/MuSim.jl")
@@ -13,6 +15,7 @@ if isdefined(@__MODULE__, :LanguageServer)
 else
     using MuSim
 end
+
 using Distributions, FLoops
 # using Plots
 
@@ -42,10 +45,6 @@ function test_coverage1_hemisimlite(n_sim::Int=500000)
     # println("expected rate = $expected_rate")
     @test rate ≈ expected_rate atol = 2rate_err
 end
-
-# %%
-# Basic coverage test
-test_coverage1_hemisimlite()
 
 # %%
 """
@@ -79,7 +78,6 @@ function test_coverage2_hemisimlite(n_sim::Int=1000000)
     @test rate ≈ expected_rate atol = 2rate_err
 end
 
-test_coverage2_hemisimlite()
 
 # %%
 """
@@ -140,7 +138,6 @@ function test_coverage3_hemisimlite(n_sim::Int=1000000)
     @test rate ≈ expected_rate atol = 2rate_err
 end
 
-test_coverage3_hemisimlite()
 
 # %%
 """
@@ -196,7 +193,15 @@ function test_coverage4_hemisim(n_sim::Int=100000)
     @test rate ≈ expected_rate atol = 2rate_err
 end
 
-test_coverage4_hemisim()
 
-# %%
+function main()
+    initrand()
+    test_coverage1_hemisimlite()
+    # test_coverage2_hemisimlite()
+    # test_coverage3_hemisimlite()
+    # test_coverage4_hemisim()
+end
+
+!isinteractive() && main()
+
 end
