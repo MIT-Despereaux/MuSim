@@ -89,12 +89,12 @@ function test_coverage3_hemisimlite(n_sim::Int=1000000)
     # Construct two planar surfaces oriented at θ
     w = 0.05
     d = 1.0 # r distance between centers (on a sphere)
-    θ1 = 20π / 60
-    box1 = RectBox("A", w, w, 0.001; orientation=(θ1, 0))
-    box2 = RectBox("B", w, w, 0.001; position=(sin(θ1) * d, 0, cos(θ1) * d), orientation=(θ1, 0))
+    θ = 20π / 60
+    box1 = RectBox("A", w, w, 0.001; orientation=(θ, 0))
+    box2 = RectBox("B", w, w, 0.001; position=(sin(θ) * d, 0, cos(θ) * d), orientation=(θ, 0))
     dets = [box1, box2]
 
-    r = 100
+    r = d * 2
     ℓ = w * 2
     # println("r = $r, ℓ = $ℓ")
     @time (results, dist_θ, dist_φ, angles) = runhemisimlite(n_sim, dets, r, ℓ)
@@ -132,7 +132,7 @@ function test_coverage3_hemisimlite(n_sim::Int=1000000)
     # println("β = $β ± $β_err")
     rate = β * 2π / 3 * I₀
     rate_err = β_err * 2π / 3 * I₀
-    expected_rate = w^2 * I₀ * cos(θ1)^2 * w^2 / d^2
+    expected_rate = w^2 * I₀ * cos(θ)^2 * w^2 / d^2
     println("rate = $rate ± $rate_err")
     println("expected rate = $expected_rate")
     @test rate ≈ expected_rate atol = 2rate_err
@@ -247,7 +247,7 @@ end
 function main()
     initrand()
     test_coverage1_hemisimlite()
-    # test_coverage2_hemisimlite()
+    test_coverage2_hemisimlite()
     # test_coverage3_hemisimlite()
     # test_coverage4_hemisim()
 end
