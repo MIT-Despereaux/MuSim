@@ -81,7 +81,7 @@ end
 
 # %%
 """
-Test for optimization.
+Test for MC Integration.
 """
 function test_coverage3_hemisimlite(n_sim::Int=1000000)
     I₀ = 1

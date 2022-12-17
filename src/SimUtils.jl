@@ -49,15 +49,15 @@ function _relativedir(T1::RectBox{T}, T2::RectBox{T}) where {T<:Real}
 end
 
 
-"""
-Determines the simulation parameters by centering on the first detector.
-"""
-function _get_ℓ_r(detectors::Vector{RectBox{T}}) where {T<:Real}
-    (x, y, z) = (detectors[1].delta_x, detectors[1].delta_y, detectors[1].delta_z)
-    ℓ = √(max(x * y, x * z, y * z)) * 5
-    r = 100
-    return ℓ, r
-end
+# """
+# Determines the simulation parameters by centering on the first detector.
+# """
+# function _get_ℓ_r(detectors::Vector{RectBox{T}}) where {T<:Real}
+#     (x, y, z) = (detectors[1].delta_x, detectors[1].delta_y, detectors[1].delta_z)
+#     ℓ = √(max(x * y, x * z, y * z)) * 5
+#     r = 100
+#     return ℓ, r
+# end
 
 """
 Helper function that samples the detector positions in accordance of "fuzzy" detectors.
@@ -81,41 +81,12 @@ end
 
 """
 Runs the simulation with a hemispherical generating surface. 
-Optional parameters θ_range and φ_range denotes the range of solid angles
-for the Rays to spawn. The solid angle vector extends from the center of
-the hemisphere to its surface. 
-By default, the simulation will center on the first detector.
 """
-function runhemisim(n_sim::Int, detectors::Vector{T},
-    R::Real, ℓ::Real;
-    exec=ThreadedEx(), center::Union{NTuple{3,Real},Nothing}=nothing) where {T<:LabObject{<:Real}}
-    if center === nothing
-        center = detectors[1].position |> Tuple
-        optimize = true
-    else
-        optimize = false
-    end
-    if optimize
-        # Find the relative direction between other detectors and the first detector
-        rel_dirs = []
-        for i in 2:length(detectors)
-            push!(rel_dirs, _relativedir(detectors[1], detectors[i]))
-        end
-        mix_dist_θ = MixtureModel([Normal(θ > π / 2 ? π - θ : θ, Δθ) for (θ, φ, Δθ, Δφ) in rel_dirs])
-        mix_dist_θ = truncated(mix_dist_θ, 0, π / 2)
-        # mix_dist_θ = Uniform(0, π / 2)
-        φ_dist = [Normal(φ, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs]
-        append!(φ_dist, [Normal(φ - π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
-        append!(φ_dist, [Normal(φ - 2π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
-        append!(φ_dist, [Normal(φ + π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
-        append!(φ_dist, [Normal(φ + 2π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
-        mix_dist_φ = truncated(MixtureModel(φ_dist), -π, π)
-        # mix_dist_φ = Uniform(-π, π)
-    else
-        mix_dist_θ = nothing
-        mix_dist_φ = nothing
-    end
-    let optimize = optimize, mix_dist_θ = mix_dist_θ, mix_dist_φ = mix_dist_φ, center = center
+function runhemisim(n_sim::Int, detectors::Vector{T}, R::Real, ℓ::Real;
+    exec=ThreadedEx(),
+    center::NTuple{3,Real}=(0, 0, 0)
+) where {T<:LabObject{<:Real}}
+    let center = center
         @floop exec for i = 1:n_sim
             # Private mutable variables
             @init begin
@@ -126,20 +97,11 @@ function runhemisim(n_sim::Int, detectors::Vector{T},
                 j_vec = zeros(length(detectors))
                 crx = Vector{Union{Missing,Dict}}(missing, length(detectors))
                 dir = Vector{Union{Missing,Dict}}(missing, length(detectors))
-                angles = zeros(2)
             end
             # Set the hit_vec to false to prepare for a new ray
             hit_vec .*= false
             # Generate a random ray
-            if optimize
-                θs = rand(mix_dist_θ)
-                φs = rand(mix_dist_φ)
-                angles = (θs, φs)
-            else
-                θs = nothing
-                φs = nothing
-            end
-            modifyray!(ray, R, center, ℓ; θ=θs, φ=φs)
+            modifyray!(ray, R, center, ℓ)
             # Loop through each dectector to fill the pre-allocated vectors
             for (j, d) in enumerate(detectors)
                 hit = isthrough!(ray, d, crosses)
@@ -164,11 +126,9 @@ function runhemisim(n_sim::Int, detectors::Vector{T},
             @reduce() do (i_list = Float64[]; ii),
             (j_list = Float64[]; jj),
             (crx_pts = [Dict{Int,Matrix{Float64}}() for i = 1:length(detectors)]; crx),
-            (ray_dirs = [Dict{Int,Vector{Float64}}() for i = 1:length(detectors)]; dir),
-            (ang_tuple = Float64[]; angles)
+            (ray_dirs = [Dict{Int,Vector{Float64}}() for i = 1:length(detectors)]; dir)
                 append!(i_list, ii)
                 append!(j_list, jj)
-                append!!(ang_tuple, angles)
                 for (j, c) in enumerate(crx)
                     if !ismissing(c) && !isempty(c)
                         merge!(crx_pts[j], crx[j])
@@ -178,54 +138,21 @@ function runhemisim(n_sim::Int, detectors::Vector{T},
             end
         end
         results = sparse(i_list, j_list, trues(length(i_list)), n_sim, length(detectors))
-        if optimize
-            return (results, crx_pts, ray_dirs, mix_dist_θ, mix_dist_φ, ang_tuple)
-        else
-            return (results, crx_pts, ray_dirs)
-        end
+        return (results, crx_pts, ray_dirs)
     end
 end
 
 
 """
 Runs the simulation with a hemispherical generating surface, outputting only the sparse matrix.
-    """
-function runhemisimlite(n_sim::Int, detectors::Vector{T},
-    R::Real, ℓ::Real;
+This is the "vanilla" version without any optimizations.
+"""
+function runhemisimlite(n_sim::Int, detectors::Vector{T}, R::Real, ℓ::Real;
     exec=ThreadedEx(),
-    center::NTuple{3,Real}=(0, 0, 0),
-    dist_θ=nothing,
-    dist_φ=nothing
+    center::NTuple{3,Real}=(0, 0, 0)
 ) where {T<:LabObject{<:Real}}
-    if center === nothing
-        center = detectors[1].position |> Tuple
-        # println("Center: ", center)
-        optimize = true
-    else
-        optimize = false
-    end
-    if optimize
-        # Find the relative direction between other detectors and the first detector
-        rel_dirs = []
-        for i in 2:length(detectors)
-            push!(rel_dirs, _relativedir(detectors[1], detectors[i]))
-        end
-        mix_dist_θ = MixtureModel([Normal(θ > π / 2 ? π - θ : θ, Δθ) for (θ, φ, Δθ, Δφ) in rel_dirs])
-        mix_dist_θ = truncated(mix_dist_θ, 0, π / 2)
-        # mix_dist_θ = Uniform(0, π / 2)
-        φ_dist = [Normal(φ, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs]
-        append!(φ_dist, [Normal(φ - π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
-        append!(φ_dist, [Normal(φ - 2π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
-        append!(φ_dist, [Normal(φ + π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
-        append!(φ_dist, [Normal(φ + 2π, Δφ) for (θ, φ, Δθ, Δφ) in rel_dirs])
-        mix_dist_φ = truncated(MixtureModel(φ_dist), -π, π)
-        # mix_dist_φ = Uniform(-π, π)
-    else
-        mix_dist_θ = nothing
-        mix_dist_φ = nothing
-    end
     # See https://juliafolds.github.io/FLoops.jl/dev/howto/avoid-box/#avoid-box for the "let" phrase.
-    let optimize = optimize, mix_dist_θ = mix_dist_θ, mix_dist_φ = mix_dist_φ, center = center
+    let center = center
         @floop exec for i = 1:n_sim
             # Private mutable variables
             @init begin
@@ -234,20 +161,11 @@ function runhemisimlite(n_sim::Int, detectors::Vector{T},
                 hit_vec = falses(length(detectors))
                 i_vec = zeros(length(detectors))
                 j_vec = zeros(length(detectors))
-                angles = zeros(2)
             end
             # Set the hit_vec to false to prepare for a new ray
             hit_vec .*= false
             # Generate a random ray
-            if optimize
-                θs = rand(mix_dist_θ)
-                φs = rand(mix_dist_φ)
-                angles = (θs, φs)
-            else
-                θs = nothing
-                φs = nothing
-            end
-            modifyray!(ray, R, center, ℓ; θ=θs, φ=φs)
+            modifyray!(ray, R, center, ℓ)
             # Loop through each dectector to fill the pre-allocated vectors
             for (j, d) in enumerate(detectors)
                 hit = isthrough!(ray, d, crosses)
@@ -263,19 +181,13 @@ function runhemisimlite(n_sim::Int, detectors::Vector{T},
             jj = j_vec[hit_vec]
             # Reduce the accumulators
             @reduce() do (i_list = Float64[]; ii),
-            (j_list = Float64[]; jj),
-            (ang_tuple = Float64[]; angles)
+            (j_list = Float64[]; jj)
                 append!!(i_list, ii)
                 append!!(j_list, jj)
-                append!!(ang_tuple, angles)
             end
         end
         results = sparse(i_list, j_list, trues(length(i_list)), n_sim, length(detectors))
-        if optimize
-            return (results, mix_dist_θ, mix_dist_φ, ang_tuple)
-        else
-            return (results)
-        end
+        return (results,)
     end
 end
 
@@ -305,16 +217,10 @@ function runexp(output_dir, sim_configs; batch_size=Int(1e6), lite=true, overwri
     for (i, config) in enumerate(sim_configs)
         detectors = config["detectors"]
         center = config["center"]
-        if center === nothing
-            # Automatically determine ℓ, r if center is not provided
-            ℓ, r = _get_ℓ_r(detectors)
-        else
-            ℓ = config["ℓ"]
-            r = config["r"]
-        end
-        config["ℓ"] = ℓ
-        config["r"] = r
+        ℓ = config["ℓ"]
+        R = config["R"]
         config_hash = hash(config)
+        config["hash"] = config_hash
         println("Config hash: $(config_hash)")
         f_name = joinpath(output_dir, "sim_cache_H$(config_hash).jld2")
         if !overwrite && isfile(f_name)
@@ -330,11 +236,11 @@ function runexp(output_dir, sim_configs; batch_size=Int(1e6), lite=true, overwri
                 continue
             end
             batch_sim_num = min(config["sim_num"] - (b - 1) * batch_size, batch_size)
-            println("\n--- Simulation events $batch_sim_num, batch#$b, config#$i, ℓ=$ℓ r=$r started ---")
+            println("\n--- Simulation events $batch_sim_num, batch#$b, config#$i, ℓ=$ℓ R=$R started ---")
             if lite
-                push!(results_tmp, runhemisimlite(batch_sim_num, detectors, r, ℓ; center=center))
+                push!(results_tmp, runhemisimlite(batch_sim_num, detectors, R, ℓ; center=center))
             else
-                push!(results_tmp, runhemisim(batch_sim_num, detectors, r, ℓ; center=center))
+                push!(results_tmp, runhemisim(batch_sim_num, detectors, R, ℓ; center=center))
             end
             @save f_name config detectors results_tmp
         end
@@ -347,65 +253,61 @@ end
 
 
 """
-Helper function that takes in the result table and the detector "pairs"
+Helper function that takes in the result table corresponding
+to a member of sim_config and the detector "combinations",
 and outputs the inclusive and exclusive geometric factor (β). 
-The pair should be a list of string, and can be of any order.
+The combination should be a list of string, and can be of any order.
 Requires a dict containing the "detect_order": det name -> column#.
-?? Detector name comes from the uncopied detector list, with convention "Det_?", where ? is the detector name.
 """
-function calculateβ(det_order, res, pair, optimize)
+function calculateβ(det_order, res, comb; optimize::Bool=false)
     inclusive_β = 0
     exclusive_β = 0
-    sort!(pair)
+    sort!(comb)
     total_n = 0
     for res_tup in res
-        if typeof(res_tup) <: Tuple
-            res_spmat = res_tup[1]
-        else
-            res_spmat = res_tup
-        end
+        res_spmat = res_tup[1]
         total_n += size(res_spmat, 1)
         if optimize
             angles = reshape(res_tup[end], 2, :)
             dist_θ = res_tup[end-2]
             dist_φ = res_tup[end-1]
         end
-        init_idx = det_order[pair[1]]
-        inc_pair_res = res_spmat[:, init_idx]
-        exc_pair_res = res_spmat[:, init_idx]
+        init_idx = det_order[comb[1]]
+        inc_comb_res = res_spmat[:, init_idx]
+        exc_comb_res = res_spmat[:, init_idx]
         for (det, col) in det_order
-            if det == pair[1]
+            if det == comb[1]
                 continue
             end
             bit_array = view(res_spmat, :, col) |> BitArray
-            if det in pair
-                exc_pair_res .&= bit_array
-                inc_pair_res .&= bit_array
+            if det in comb
+                exc_comb_res .&= bit_array
+                inc_comb_res .&= bit_array
             else
-                exc_pair_res = exc_pair_res .> bit_array
+                exc_comb_res = exc_comb_res .> bit_array
             end
         end
         if optimize
-            for i in eachindex(inc_pair_res)
-                if inc_pair_res[i]
+            for i in eachindex(inc_comb_res)
+                if inc_comb_res[i]
                     local θ = angles[1, i]
                     local φ = angles[2, i]
                     inclusive_β += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
                 end
             end
-            for i in eachindex(exc_pair_res)
-                if exc_pair_res[i]
+            for i in eachindex(exc_comb_res)
+                if exc_comb_res[i]
                     local θ = angles[1, i]
                     local φ = angles[2, i]
                     exclusive_β += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
                 end
             end
         else
-            inclusive_β += sum(inc_pair_res)
-            exclusive_β += sum(exc_pair_res)
+            inclusive_β += sum(inc_comb_res)
+            exclusive_β += sum(exc_comb_res)
         end
     end
-    println("Combination: $(pair)")
+    println("Combination: $(comb)")
 
     println("Total number of events: $(total_n)")
     inclusive_β /= total_n
@@ -419,40 +321,27 @@ end
 """
 This function processes the input result table and outputs the geometric
 factors as a dict. It also saves the dict as a csv file.
-The "first_only" option is used to output only the first detector.
 """
-function βio(output_dir, res, config; savefile=false, overwrite=false, first_only=false)
+function βio(output_dir, res, config; savefile=false, overwrite=false)
     config_hash = hash(config)
+    @assert config["hash"] == config_hash "Config hash mismatch!"
     println("βio config hash: $(config_hash)")
     # Check the output table
     f_name = joinpath(output_dir, "comb_table_H$(config_hash).csv")
-    if isfile(f_name) && !overwrite
+    if !overwrite && isfile(f_name)
         println("$(f_name) found, loading...")
         geo_factors = CSV.File(f_name) |> Dict{String,Float64}
     else
         geo_factors = Dict{String,Float64}()
         detectors = config["detectors"]
         det_order = Dict{String,Int}(d.name => i for (i, d) in enumerate(detectors))
-        if config["center"] === nothing
-            optimize = true
-        else
-            optimize = false
-        end
         # List all combinations
         combs = combinations(collect(keys(det_order)))
         for c in combs
             sort!(c)
             println("Current comb: $(c)")
             # join(β, delim) for concatenation
-            if optimize && detectors[1].name ∉ c
-                println("Skipped due to optimize!")
-                continue
-            end
-            if first_only && [detectors[1].name] != c
-                println("Skipped due to first_only!")
-                continue
-            end
-            (inclusive_β, exclusive_β) = calculateβ(det_order, res, c, optimize)
+            (inclusive_β, exclusive_β) = calculateβ(det_order, res, c)
             # println("Inclusive beta: $(inclusive_β)")
             # println("Exclusive beta: $(exclusive_β)")
             geo_factors["inc_beta_$(join(c, "_"))"] = inclusive_β * config["ℓ"]^2
@@ -464,59 +353,6 @@ function βio(output_dir, res, config; savefile=false, overwrite=false, first_on
         end
     end
     return geo_factors
-end
-
-
-"""
-Compose the simulation assuming the first "detector" is the chip.
-This function aims to output the "correct" geometric factor.
-"""
-function composeβ(output_dir, detectors::Vector{RectBox{T}}, n_sim::Int; overwrite=false, include_chip=true) where {T<:Real}
-    config = Dict{String,Any}("sim_num" => n_sim)
-    config["detectors"] = detectors
-    config_hash = hash(config)
-    println("composeβ config hash: $(config_hash)")
-    # Check the output table
-    f_name = joinpath(output_dir, "comb_table_H$(config_hash).csv")
-    if isfile(f_name) && !overwrite
-        println("$(f_name) found, loading...")
-        βs = CSV.File(f_name) |> Dict{String,Float64}
-    else
-        βs = Dict{String,Float64}()
-        for i in eachindex(detectors)
-            dets = circshift(detectors, -i)
-            config["detectors"] = dets
-            config["center"] = nothing
-            if include_chip
-                if i == length(detectors)
-                    config["sim_num"] = n_sim * 10
-                end
-            end
-            res, sim_configs = runexp(output_dir, [config])
-            merge!(βs, βio(output_dir, res[1], sim_configs[1]))
-        end
-        config["sim_num"] = n_sim
-        for i in eachindex(detectors)
-            dets = circshift(detectors, -i)
-            config["detectors"] = dets
-            config["center"] = dets[1].position |> Tuple
-            ℓ, r = _get_ℓ_r(dets)
-            config["ℓ"] = ℓ
-            config["r"] = r
-            if include_chip
-                if i == length(detectors)
-                    config["sim_num"] = n_sim * 10
-                end
-            end
-            res, sim_configs = runexp(output_dir, [config])
-            merge!(βs, βio(output_dir, res[1], sim_configs[1]; first_only=true))
-        end
-    end
-    βs = sort(collect(βs), by=x -> x[1])
-    println("Saving βs to $(f_name)...")
-    println("βs: $(βs)")
-    CSV.write(f_name, βs)
-    return (config_hash, βs)
 end
 
 
@@ -590,4 +426,59 @@ function expio(output_dir, config; overwrite=false, res=nothing, crx=nothing, di
     end
 
     return sim_res
+end
+
+
+# --- Scratch ---
+
+"""
+Compose the simulation assuming the first "detector" is the chip.
+This function aims to output the "correct" geometric factor.
+"""
+function composeβ(output_dir, detectors::Vector{RectBox{T}}, n_sim::Int; overwrite=false, include_chip=true) where {T<:Real}
+    config = Dict{String,Any}("sim_num" => n_sim)
+    config["detectors"] = detectors
+    config_hash = hash(config)
+    println("composeβ config hash: $(config_hash)")
+    # Check the output table
+    f_name = joinpath(output_dir, "comb_table_H$(config_hash).csv")
+    if isfile(f_name) && !overwrite
+        println("$(f_name) found, loading...")
+        βs = CSV.File(f_name) |> Dict{String,Float64}
+    else
+        βs = Dict{String,Float64}()
+        for i in eachindex(detectors)
+            dets = circshift(detectors, -i)
+            config["detectors"] = dets
+            config["center"] = nothing
+            if include_chip
+                if i == length(detectors)
+                    config["sim_num"] = n_sim * 10
+                end
+            end
+            res, sim_configs = runexp(output_dir, [config])
+            merge!(βs, βio(output_dir, res[1], sim_configs[1]))
+        end
+        config["sim_num"] = n_sim
+        for i in eachindex(detectors)
+            dets = circshift(detectors, -i)
+            config["detectors"] = dets
+            config["center"] = dets[1].position |> Tuple
+            ℓ, r = _get_ℓ_r(dets)
+            config["ℓ"] = ℓ
+            config["r"] = r
+            if include_chip
+                if i == length(detectors)
+                    config["sim_num"] = n_sim * 10
+                end
+            end
+            res, sim_configs = runexp(output_dir, [config])
+            merge!(βs, βio(output_dir, res[1], sim_configs[1]; first_only=true))
+        end
+    end
+    βs = sort(collect(βs), by=x -> x[1])
+    println("Saving βs to $(f_name)...")
+    println("βs: $(βs)")
+    CSV.write(f_name, βs)
+    return (config_hash, βs)
 end
