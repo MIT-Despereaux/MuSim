@@ -7,6 +7,7 @@ using StaticArrays
 using QuadGK
 using Roots
 using JLD2
+using StatsBase
 
 CACHE_DIR = joinpath(dirname(@__FILE__), "cache")
 mkpath(CACHE_DIR)
@@ -120,6 +121,7 @@ end
 
 """
 A sampler for an arbitrary univariate distribution using its cdf.
+NOTE: THIS METHOD IS NOT STABLE. 
 """
 function unisamplercdf!(ecdf; low_bound=-Inf, upp_bound=Inf, cache=nothing, cache_size=Int(1e5))
     if cache !== nothing && length(cache) > cache_size
@@ -127,7 +129,7 @@ function unisamplercdf!(ecdf; low_bound=-Inf, upp_bound=Inf, cache=nothing, cach
     end
     x = rand()
     eqn = y -> ecdf(y) - x
-    res = find_zero(eqn, (low_bound, upp_bound), A42())
+    res = find_zero(eqn, (low_bound, upp_bound), Bisection())
     if cache !== nothing
         push!(cache, res)
     end

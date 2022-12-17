@@ -1,25 +1,40 @@
-using StatsBase, Distributions, MuSim
+using StatsBase, Distributions, Interpolations, Plots, MuSim
 # Creating original samples...
-N = Normal(0, 1)
-obs = rand(N, 10000)
-sort!(obs)
-# Cdf..
-myCdf = ecdf(obs)
-
-cdf_obs = map(x -> myCdf(x), obs)
-result = []
-for n in 1:10000
-    push!(result, unisamplercdf!(myCdf; low_bound=round(minimum(myCdf)), upp_bound=round(maximum(myCdf))))
-end
-
-histogram(obs, bins=100, normalize=:pdf)
-histogram!(result, bins=100, normalize=:pdf)
+C = Cauchy(0, 0.01)
+obs = rand(C, 100000)
+eCDF = ecdf(obs)
 
 # %%
-# using MCIntegration
+hist = fit(Histogram, obs, nbins=100)
+edge_diff = hist.edges[1][2] - hist.edges[1][1]
+edges = hist.edges[1][1]:edge_diff:hist.edges[1][end]
 
-# res = integrate((x, c) -> log(x[1]) / sqrt(x[1]))
-# plot(res.config.var[1].histogram)
+# %%
+itp = linear_interpolation(edges, (eCDF(edges)), extrapolation_bc=Flat())
+
+# %%
+
+result = []
+for n in 1:10000
+    push!(result, unisamplercdf!(itp; low_bound=floor(minimum(eCDF)), upp_bound=ceil(maximum(eCDF))))
+end
+
+grad = []
+for e in edges
+    push!(grad, gradient(itp, e)[1])
+end
+
+plot(edges, grad)
+histogram!(obs, bins=100, normalize=:pdf, alpha=0.3)
+histogram!(result, bins=100, normalize=:pdf, alpha=0.3)
+
+# %%
+using MCIntegration
+
+X = MCIntegration.Continuous(0.0, 2.0)
+res = integrate((X, c) -> (X[1]^2 + X[2]^2 < 1.5); var=X, dof=2)
+println(res.mean)
+plot(res.config.var[1].grid)
 
 # Cdf --> Pmf..
 # pmf_obs = Float64[]
@@ -38,3 +53,7 @@ histogram!(result, bins=100, normalize=:pdf)
 # plot(sort(out))
 # # quantile(d, 0.5)
 # # quantile(d, 1 - 0.025)
+
+# Current problem:
+# 1. Interpolation of eCDF and sampling: interpolation is not monotonic and stable, and sampling also could not use CDF directly.
+# 2. MC integration does not output explicit optimized variables. Have a hard time to calculate derived quantities.
