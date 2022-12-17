@@ -72,7 +72,9 @@ Randomly modifies a ray with start uniform x, y ∈ (-max_x, max_x) U (-max_y, m
 The center is given as a tuple.
 If not given, the θ and φ are drawn from cos³sin and uniform distributions respectively.
 """
-function modifyray!(r::Ray{<:Real}, max_bounds::NTuple{2,Real}, center::NTuple{3,Real}; θ::Union{Nothing,Real}=nothing, φ::Union{Nothing,Real}=nothing)::Nothing
+function modifyray!(r::Ray{<:Real}, max_bounds::NTuple{2,Real}, center::Union{NTuple{3,Real},SVector{3}};
+    θ::Union{Nothing,Real}=nothing,
+    φ::Union{Nothing,Real}=nothing)::Nothing
     x = rand() * 2max_bounds[1] - max_bounds[1] + center[1]
     y = rand() * 2max_bounds[2] - max_bounds[2] + center[2]
     if θ === nothing
@@ -92,10 +94,14 @@ end
 """
 Randomly modifies a ray on the upper hemisphere with radius R. The direction is along the normal vector.
 If not given, the θ and φ are drawn from cos²sin and uniform distributions respectively.
+If not given, the x and y are drawn from uniform distribution within [-ℓ/2, ℓ/2].
 See http://arxiv.org/abs/1912.05462.
 """
-function modifyray!(r::Ray{<:Real}, R::Real, center::NTuple{3,Real}, ℓ::Real;
-    θ::Union{Nothing,Real}=nothing, φ::Union{Nothing,Real}=nothing)::Nothing
+function modifyray!(r::Ray{<:Real}, R::Real, center::Union{NTuple{3,Real},SVector{3}}, ℓ::Real;
+    θ::Union{Nothing,Real}=nothing,
+    φ::Union{Nothing,Real}=nothing,
+    x::Union{Nothing,Real}=nothing,
+    y::Union{Nothing,Real}=nothing)::Nothing
     if θ === nothing
         # Generate by the distribution
         θ = _randcos2()
@@ -106,9 +112,16 @@ function modifyray!(r::Ray{<:Real}, R::Real, center::NTuple{3,Real}, ℓ::Real;
     start_θ = π - θ
     start_φ = φ + π
     x_vec = SA_F64[sin(start_θ)*cos(start_φ), sin(start_θ)*sin(start_φ), cos(start_θ)] * R
-    pos = (@SVector(rand(2)) * ℓ) .- ℓ / 2
-    θ_hat = SA_F64[cos(θ)*cos(φ), cos(θ)*sin(φ), -sin(θ)]
-    φ_hat = SA_F64[-sin(φ), cos(φ), 0]
+    if x === nothing
+        x = rand() * ℓ - ℓ / 2
+    end
+    if y === nothing
+        y = rand() * ℓ - ℓ / 2
+    end
+    @assert -ℓ / 2 <= x <= ℓ / 2 && -ℓ / 2 <= y <= ℓ / 2
+    pos = @SVector [x, y]
+    θ_hat = SA_F64[cos(start_θ)*cos(start_φ), cos(start_θ)*sin(start_φ), -sin(start_θ)]
+    φ_hat = SA_F64[-sin(start_φ), cos(start_φ), 0]
     dx_vec = pos[1] * θ_hat + pos[2] * φ_hat
     x_vec += (dx_vec + (center |> SVector))
     r.azimuth = θ

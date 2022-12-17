@@ -6,7 +6,7 @@ module CoverageTest
 include("testutils.jl")
 
 using Test
-# using Infiltrator
+using Infiltrator
 
 # The following code is necessary to fix VSCode julia local module linting
 if isdefined(@__MODULE__, :LanguageServer)
@@ -16,7 +16,6 @@ else
     using MuSim
 end
 
-using Distributions, FLoops
 # using Plots
 
 # %%
@@ -30,19 +29,24 @@ function test_coverage1_hemisimlite(n_sim::Int=500000)
 
     # Construct a X x Y x Z box (unit m)
     box = [RectBox("A", x, y, z, orientation=ori)]
-    r = max(x, y, z) * 3
+    R = max(x, y, z) * 3
     ℓ = max(x * y, x * z, y * z) * 1.75
-    # println("r = $r, ℓ = $ℓ")
-    results = runhemisimlite(n_sim, box, r, ℓ; center=(0, 0, 0))
+    # println("R = $R, ℓ = $ℓ")
+    (results,) = runhemisimlite(n_sim, box, R, ℓ; center=(0, 0, 0))
 
     expected_rate = analytic_R(box[1], I₀=I₀)
+
+    @time (integrated_rate, int_rate_err, res_check) = analytic_R(box, R, ℓ, seed=1234, I₀=I₀)
+    # @infiltrate
+
 
     β = sum(results) / n_sim
     β_err = √(β * (1 - β) / n_sim)
     rate = β * ℓ^2 * 2π / 3 * I₀
     rate_err = β_err * ℓ^2 * 2π / 3 * I₀
-    # println("rate = $rate ± $rate_err")
-    # println("expected rate = $expected_rate")
+    println("rate = $rate ± $rate_err")
+    println("integrated rate = $integrated_rate ± $int_rate_err")
+    println("expected rate = $expected_rate")
     @test rate ≈ expected_rate atol = 2rate_err
 end
 
@@ -64,7 +68,7 @@ function test_coverage2_hemisimlite(n_sim::Int=1000000)
     r = d * 2
     ℓ = w * 2
     # println("r = $r, ℓ = $ℓ")
-    @time results = runhemisimlite(n_sim, dets, r, ℓ; center=(0, 0, 0))
+    @time (results,) = runhemisimlite(n_sim, dets, r, ℓ)
     res = view(results, :, 1) .& view(results, :, 2)
 
     β = sum(res) / n_sim
@@ -83,115 +87,94 @@ end
 """
 Test for MC Integration.
 """
-function test_coverage3_hemisimlite(n_sim::Int=1000000)
+function test_coverage3_hemisimlite(n_sim::Int=5000000)
     I₀ = 1
 
     # Construct two planar surfaces oriented at θ
-    w = 0.05
-    d = 1.0 # r distance between centers (on a sphere)
-    θ = 20π / 60
+    w = 0.5
+    d = 1.0 # R distance between centers (on a sphere)
+    θ = 0π / 60
     box1 = RectBox("A", w, w, 0.001; orientation=(θ, 0))
     box2 = RectBox("B", w, w, 0.001; position=(sin(θ) * d, 0, cos(θ) * d), orientation=(θ, 0))
     dets = [box1, box2]
 
-    r = d * 2
+    R = d * 2
     ℓ = w * 2
-    # println("r = $r, ℓ = $ℓ")
-    @time (results, dist_θ, dist_φ, angles) = runhemisimlite(n_sim, dets, r, ℓ)
-    # println("dist_θ = $dist_θ, dist_φ = $dist_φ")
-    angles = reshape(angles, 2, :)
+    # println("R = $R, ℓ = $ℓ")
+    @time (results,) = runhemisimlite(n_sim, dets, R, ℓ)
     res = view(results, :, 1) .& view(results, :, 2)
-    # p1 = histogram(angles[1, :], bins=500, label="θ")
-    # p2 = histogram(angles[2, :], bins=500, label="φ")
-    # display(p1)
-    # display(p2)
-    # Importance sampling
-    β = 0
-    for i in eachindex(res)
-        if res[i]
-            local θ = angles[1, i]
-            local φ = angles[2, i]
-            β += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
-        end
-    end
-    β /= n_sim
-    # Calculate the variance
-    σβ = 0
-    for i in eachindex(res)
-        if res[i]
-            local θ = angles[1, i]
-            local φ = angles[2, i]
-            σβ += (3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ)) - β)^2
-        else
-            σβ += (β)^2
-        end
-    end
-    β_err = (√σβ) / n_sim
-    β *= ℓ^2
-    β_err *= ℓ^2
-    # println("β = $β ± $β_err")
-    rate = β * 2π / 3 * I₀
-    rate_err = β_err * 2π / 3 * I₀
-    expected_rate = w^2 * I₀ * cos(θ)^2 * w^2 / d^2
-    println("rate = $rate ± $rate_err")
-    println("expected rate = $expected_rate")
-    @test rate ≈ expected_rate atol = 2rate_err
-end
 
-
-# %%
-"""
-Test for optimization for the full simulation.
-"""
-function test_coverage4_hemisim(n_sim::Int=100000)
-    I₀ = 58
-
-    # Construct two planar surfaces oriented at θ
-    w = 0.05
-    d = 1.0 # r distance between centers (on a sphere)
-    θ = 0.0
-    θ2 = θ + deg2rad(3)
-    box1 = RectBox("A", w, w, 0.001; orientation=(θ, 0))
-    box2 = RectBox("B", w, w, 0.001; position=(sin(θ) * d, 0, cos(θ) * d), orientation=(θ, 0))
-    box3 = RectBox("C", w, w, 0.001; position=(sin(θ2) * d * 1.5, 0, cos(θ2) * d * 1.5), orientation=(θ2, 0))
-    dets = [box1, box2, box3]
-
-    r = d * 2
-    ℓ = w * 2
-    # println("r = $r, ℓ = $ℓ")
-    (results, _, _, dist_θ, dist_φ, angles) = runhemisim(n_sim, dets, r, ℓ)
-    angles = reshape(angles, 2, :)
-    res = view(results, :, 1) .& view(results, :, 2)
-    # Importance sampling
-    β = 0
-    for i in eachindex(res)
-        if res[i]
-            local θ = angles[1, i]
-            local φ = angles[2, i]
-            β += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
-        end
-    end
-    β /= n_sim
-    # Calculate the variance
-    σβ = 0
-    for i in eachindex(res)
-        if res[i]
-            local θ = angles[1, i]
-            local φ = angles[2, i]
-            σβ += (3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ)) - β)^2
-        else
-            σβ += (β)^2
-        end
-    end
-    β_err = (√σβ) / n_sim
-    # println("β = $β ± $β_err")
+    β = sum(res) / n_sim
+    β_err = √(β * (1 - β) / n_sim)
+    println("β = $β ± $β_err")
     rate = β * ℓ^2 * 2π / 3 * I₀
     rate_err = β_err * ℓ^2 * 2π / 3 * I₀
+
+    @time (integrated_rate, int_rate_err, res_check) = analytic_R(dets, R, ℓ, seed=1234, I₀=I₀)
+    # @infiltrate
+
     expected_rate = w^2 * I₀ * cos(θ)^2 * w^2 / d^2
     println("rate = $rate ± $rate_err")
+    println("integrated rate = $integrated_rate ± $int_rate_err")
     println("expected rate = $expected_rate")
-    @test rate ≈ expected_rate atol = 2rate_err
+    # @test rate ≈ expected_rate atol = 2rate_err
+    # @test rate ≈ integrated_rate atol = 2rate_err
 end
+
+
+# # %%
+# """
+# Test for optimization for the full simulation.
+# """
+# function test_coverage4_hemisim(n_sim::Int=100000)
+#     I₀ = 58
+
+#     # Construct two planar surfaces oriented at θ
+#     w = 0.05
+#     d = 1.0 # r distance between centers (on a sphere)
+#     θ = 0.0
+#     θ2 = θ + deg2rad(3)
+#     box1 = RectBox("A", w, w, 0.001; orientation=(θ, 0))
+#     box2 = RectBox("B", w, w, 0.001; position=(sin(θ) * d, 0, cos(θ) * d), orientation=(θ, 0))
+#     box3 = RectBox("C", w, w, 0.001; position=(sin(θ2) * d * 1.5, 0, cos(θ2) * d * 1.5), orientation=(θ2, 0))
+#     dets = [box1, box2, box3]
+
+#     r = d * 2
+#     ℓ = w * 2
+#     # println("r = $r, ℓ = $ℓ")
+#     (results, _, _, dist_θ, dist_φ, angles) = runhemisim(n_sim, dets, r, ℓ)
+#     angles = reshape(angles, 2, :)
+#     res = view(results, :, 1) .& view(results, :, 2)
+#     # Importance sampling
+#     β = 0
+#     for i in eachindex(res)
+#         if res[i]
+#             local θ = angles[1, i]
+#             local φ = angles[2, i]
+#             β += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
+#         end
+#     end
+#     β /= n_sim
+#     # Calculate the variance
+#     σβ = 0
+#     for i in eachindex(res)
+#         if res[i]
+#             local θ = angles[1, i]
+#             local φ = angles[2, i]
+#             σβ += (3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ)) - β)^2
+#         else
+#             σβ += (β)^2
+#         end
+#     end
+#     β_err = (√σβ) / n_sim
+#     # println("β = $β ± $β_err")
+#     rate = β * ℓ^2 * 2π / 3 * I₀
+#     rate_err = β_err * ℓ^2 * 2π / 3 * I₀
+#     expected_rate = w^2 * I₀ * cos(θ)^2 * w^2 / d^2
+#     println("rate = $rate ± $rate_err")
+#     println("expected rate = $expected_rate")
+#     @test rate ≈ expected_rate atol = 2rate_err
+# end
 
 
 function setup_geometry()
@@ -247,7 +230,7 @@ end
 function main()
     initrand()
     test_coverage1_hemisimlite()
-    test_coverage2_hemisimlite()
+    # test_coverage2_hemisimlite()
     # test_coverage3_hemisimlite()
     # test_coverage4_hemisim()
 end

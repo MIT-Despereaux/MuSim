@@ -7,7 +7,7 @@ using Printf
 using StaticArrays
 using DataStructures
 using HCubature
-
+using MCIntegration
 
 # Abstract lab object that can be used in coincidence
 # It is NOT possible to subtype a concrete type
@@ -424,3 +424,42 @@ function isthrough!(r::Ray, cyl::Cylinder, crosses::SortedDict{Float64,SVector{3
     end
 end
 
+
+# --- Scratch ---
+
+"""
+Calculate the analytic rate of a set of detectors by using MC Integration (hemisphere).
+PROBLEM: INTEGRATION ERROR IS TOO LARGE.
+"""
+function analytic_R(detectors::Vector{T}, R::Real, ℓ::Real;
+    seed::Union{Int,Nothing}=nothing,
+    I₀::Real=1) where {T<:LabObject{<:Real}}
+    # Find center of the set of detectors:
+    center = SA_F64[0, 0, 0]
+    for d in detectors
+        center += d.position
+    end
+    center /= length(detectors)
+    θ = MCIntegration.Continuous(0.0, π / 2)
+    φ = MCIntegration.Continuous(0.0, 2π)
+    XY = MCIntegration.Continuous(-ℓ / 2, ℓ / 2)
+    int_config = Configuration(var=(θ, φ, XY), dof=[[1, 1, 2]])
+    if seed !== nothing
+        int_config.seed = seed
+    end
+    prob_integrand = (X, c) -> (sin(X[1][1]) * cos(X[1][1])^2)
+    hit_func = (X, c) -> begin
+        r = Ray(0.0, 0.0)
+        modifyray!(r, R, center, ℓ; θ=(π - X[1][1]), φ=(X[2][1] + π), x=X[3][3], y=X[3][2])
+        return all(d -> isthrough!(r, d, SortedDict{Float64,SVector{3,Float64}}()), detectors)
+    end
+    hit_integrand = (X, c) -> begin
+        hit_func(X, c) ? prob_integrand(X, c) : 0
+    end
+    prob = integrate(prob_integrand, config=int_config)
+    hit_prob = integrate(hit_integrand, config=int_config, print=1, neval=1e5, niter=15)
+    (hit_prob_mean, hit_prob_std, _) = MCIntegration.average(hit_prob.iterations, init=10)
+    return (hit_prob_mean * I₀ * ℓ^2 / prob.mean,
+        hit_prob_std * I₀ * ℓ^2 / prob.mean,
+        hit_prob)
+end
