@@ -429,7 +429,6 @@ end
 
 """
 Calculate the analytic rate of a set of detectors by using MC Integration (hemisphere).
-PROBLEM: INTEGRATION ERROR IS TOO LARGE.
 """
 function analytic_R(detectors::Vector{T}, R::Real, ℓ::Real;
     seed::Union{Int,Nothing}=nothing,
@@ -442,24 +441,23 @@ function analytic_R(detectors::Vector{T}, R::Real, ℓ::Real;
     center /= length(detectors)
     θ = MCIntegration.Continuous(0.0, π / 2)
     φ = MCIntegration.Continuous(0.0, 2π)
-    XY = MCIntegration.Continuous(-ℓ / 2, ℓ / 2)
-    int_config = Configuration(var=(θ, φ, XY), dof=[[1, 1, 2]])
+    XY = MCIntegration.Continuous(-ℓ / 2, ℓ / 2, adapt=false)
+    int_config = Configuration(var=(θ, φ, XY), dof=[[1, 1, 2]], userdata=Dict("Ray" => Ray(0.0, 0.0)))
     if seed !== nothing
+        println("Using seed: $seed")
         int_config.seed = seed
+        int_config.rng = MersenneTwister(seed)
     end
     prob_integrand = (X, c) -> (sin(X[1][1]) * cos(X[1][1])^2)
     hit_func = (X, c) -> begin
-        r = Ray(0.0, 0.0)
-        modifyray!(r, R, center, ℓ; θ=(π - X[1][1]), φ=(X[2][1] + π), x=X[3][3], y=X[3][2])
+        r = c.userdata["Ray"]
+        (θ̃, φ̃, x̃, ỹ) = (π - X[1][1], X[2][1] + π, X[3][1], X[3][2])
+        modifyray!(r, R, center, ℓ; θ=θ̃, φ=φ̃, x=x̃, y=ỹ)
         return all(d -> isthrough!(r, d, SortedDict{Float64,SVector{3,Float64}}()), detectors)
     end
     hit_integrand = (X, c) -> begin
-        hit_func(X, c) ? prob_integrand(X, c) : 0
+        return hit_func(X, c) ? prob_integrand(X, c) : 0.0
     end
-    prob = integrate(prob_integrand, config=int_config)
-    hit_prob = integrate(hit_integrand, config=int_config, print=1, neval=1e5, niter=15)
-    (hit_prob_mean, hit_prob_std, _) = MCIntegration.average(hit_prob.iterations, init=10)
-    return (hit_prob_mean * I₀ * ℓ^2 / prob.mean,
-        hit_prob_std * I₀ * ℓ^2 / prob.mean,
-        hit_prob)
+    hit_prob = integrate(hit_integrand, config=int_config, print=-1, neval=1e6, niter=20)
+    return (hit_prob.mean * I₀, hit_prob)
 end
