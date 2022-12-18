@@ -425,8 +425,6 @@ function isthrough!(r::Ray, cyl::Cylinder, crosses::SortedDict{Float64,SVector{3
 end
 
 
-# --- Scratch ---
-
 """
 Calculate the analytic rate of a set of detectors by using MC Integration (hemisphere).
 """
@@ -461,3 +459,6 @@ function analytic_R(detectors::Vector{T}, R::Real, ℓ::Real;
     hit_prob = integrate(hit_integrand, config=int_config, print=-1, neval=1e6, niter=20)
     return (hit_prob.mean * I₀, hit_prob)
 end
+
+
+# --- Scratch ---
