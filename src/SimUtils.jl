@@ -220,7 +220,6 @@ function runexp(output_dir, sim_configs; batch_size=Int(1e6), lite=true, overwri
         ℓ = config["ℓ"]
         R = config["R"]
         config_hash = hash(config)
-        config["hash"] = config_hash
         println("Config hash: $(config_hash)")
         f_name = joinpath(output_dir, "sim_cache_H$(config_hash).jld2")
         if !overwrite && isfile(f_name)
@@ -236,7 +235,7 @@ function runexp(output_dir, sim_configs; batch_size=Int(1e6), lite=true, overwri
                 continue
             end
             batch_sim_num = min(config["sim_num"] - (b - 1) * batch_size, batch_size)
-            println("\n--- Simulation events $batch_sim_num, batch#$b, config#$i, ℓ=$ℓ R=$R started ---")
+            println("\n--- Simulation events $batch_sim_num, batch#$b, config#$i, ℓ=$ℓ, R=$R started ---")
             if lite
                 push!(results_tmp, runhemisimlite(batch_sim_num, detectors, R, ℓ; center=center))
             else
@@ -259,7 +258,7 @@ and outputs the inclusive and exclusive geometric factor (β).
 The combination should be a list of string, and can be of any order.
 Requires a dict containing the "detect_order": det name -> column#.
 """
-function calculateβ(det_order, res, comb; optimize::Bool=false)
+function calculateβ(config, det_order, res, comb; optimize::Bool=false)
     inclusive_β = 0
     exclusive_β = 0
     sort!(comb)
@@ -310,11 +309,37 @@ function calculateβ(det_order, res, comb; optimize::Bool=false)
     println("Combination: $(comb)")
 
     println("Total number of events: $(total_n)")
+    inclusive_β_err = sqrt(inclusive_β)
+    exclusive_β_err = sqrt(exclusive_β)
     inclusive_β /= total_n
     exclusive_β /= total_n
-    println("Inclusive beta: $(inclusive_β)")
-    println("Exclusive beta: $(exclusive_β)")
+    inclusive_β *= config["ℓ"]^2 * (2π) / 3
+    exclusive_β *= config["ℓ"]^2 * (2π) / 3
+    inclusive_β_err = inclusive_β_err / total_n * config["ℓ"]^2 * (2π) / 3
+    exclusive_β_err = exclusive_β_err / total_n * config["ℓ"]^2 * (2π) / 3
+    println("Inclusive beta: $(inclusive_β) ± $(inclusive_β_err)")
+    println("Exclusive beta: $(exclusive_β) ± $(exclusive_β_err)")
     return inclusive_β, exclusive_β
+end
+
+"""
+The MC counterpart of calculating the β factors.
+"""
+function calculateβ_MC(config, comb)
+    println("Combination: $(comb)")
+    dets = config["detectors"]
+    included_dets = Vector{RectBox{Float64}}()
+    for d in dets
+        if d.name in comb
+            push!(included_dets, d)
+        end
+    end
+    missing_dets = setdiff(dets, included_dets)
+    inclusive_β_res = analytic_R(included_dets)
+    exclusive_β_res = analytic_R(included_dets, excluded_detectors=missing_dets, config=inclusive_β_res.config)
+    println("Inclusive beta: $(inclusive_β_res.mean) ± $(inclusive_β_res.stdev)")
+    println("Exclusive beta: $(exclusive_β_res.mean) ± $(exclusive_β_res.stdev)")
+    return inclusive_β_res.mean, exclusive_β_res.mean
 end
 
 
@@ -324,7 +349,6 @@ factors as a dict. It also saves the dict as a csv file.
 """
 function βio(output_dir, res, config; savefile=false, overwrite=false)
     config_hash = hash(config)
-    @assert config["hash"] == config_hash "Config hash mismatch!"
     println("βio config hash: $(config_hash)")
     # Check the output table
     f_name = joinpath(output_dir, "comb_table_H$(config_hash).csv")
@@ -339,13 +363,47 @@ function βio(output_dir, res, config; savefile=false, overwrite=false)
         combs = combinations(collect(keys(det_order)))
         for c in combs
             sort!(c)
-            println("Current comb: $(c)")
             # join(β, delim) for concatenation
-            (inclusive_β, exclusive_β) = calculateβ(det_order, res, c)
+            (inclusive_β, exclusive_β) = calculateβ(config, det_order, res, c)
             # println("Inclusive beta: $(inclusive_β)")
             # println("Exclusive beta: $(exclusive_β)")
-            geo_factors["inc_beta_$(join(c, "_"))"] = inclusive_β * config["ℓ"]^2
-            geo_factors["exc_beta_$(join(c, "_"))"] = exclusive_β * config["ℓ"]^2
+            geo_factors["inc_beta_$(join(c, "_"))"] = inclusive_β
+            geo_factors["exc_beta_$(join(c, "_"))"] = exclusive_β
+        end
+        if savefile
+            geo_factors = sort(collect(geo_factors), by=x -> x[1])
+            CSV.write(f_name, geo_factors)
+        end
+    end
+    return geo_factors
+end
+
+
+"""
+MC Counterpart of βio.
+"""
+function βio_MC(output_dir, config; savefile=false, overwrite=false)
+    config_hash = hash(config)
+    println("βio config hash: $(config_hash)")
+    # Check the output table
+    f_name = joinpath(output_dir, "comb_table_MC_H$(config_hash).csv")
+    if !overwrite && isfile(f_name)
+        println("$(f_name) found, loading...")
+        geo_factors = CSV.File(f_name) |> Dict{String,Float64}
+    else
+        geo_factors = Dict{String,Float64}()
+        detectors = config["detectors"]
+        det_order = Dict{String,Int}(d.name => i for (i, d) in enumerate(detectors))
+        # List all combinations
+        combs = combinations(collect(keys(det_order)))
+        for c in combs
+            sort!(c)
+            # join(β, delim) for concatenation
+            (inclusive_β, exclusive_β) = calculateβ_MC(config, c)
+            # println("Inclusive beta: $(inclusive_β)")
+            # println("Exclusive beta: $(exclusive_β)")
+            geo_factors["inc_beta_$(join(c, "_"))"] = inclusive_β
+            geo_factors["exc_beta_$(join(c, "_"))"] = exclusive_β
         end
         if savefile
             geo_factors = sort(collect(geo_factors), by=x -> x[1])
@@ -431,54 +489,54 @@ end
 
 # --- Scratch ---
 
-"""
-Compose the simulation assuming the first "detector" is the chip.
-This function aims to output the "correct" geometric factor.
-"""
-function composeβ(output_dir, detectors::Vector{RectBox{T}}, n_sim::Int; overwrite=false, include_chip=true) where {T<:Real}
-    config = Dict{String,Any}("sim_num" => n_sim)
-    config["detectors"] = detectors
-    config_hash = hash(config)
-    println("composeβ config hash: $(config_hash)")
-    # Check the output table
-    f_name = joinpath(output_dir, "comb_table_H$(config_hash).csv")
-    if isfile(f_name) && !overwrite
-        println("$(f_name) found, loading...")
-        βs = CSV.File(f_name) |> Dict{String,Float64}
-    else
-        βs = Dict{String,Float64}()
-        for i in eachindex(detectors)
-            dets = circshift(detectors, -i)
-            config["detectors"] = dets
-            config["center"] = nothing
-            if include_chip
-                if i == length(detectors)
-                    config["sim_num"] = n_sim * 10
-                end
-            end
-            res, sim_configs = runexp(output_dir, [config])
-            merge!(βs, βio(output_dir, res[1], sim_configs[1]))
-        end
-        config["sim_num"] = n_sim
-        for i in eachindex(detectors)
-            dets = circshift(detectors, -i)
-            config["detectors"] = dets
-            config["center"] = dets[1].position |> Tuple
-            ℓ, r = _get_ℓ_r(dets)
-            config["ℓ"] = ℓ
-            config["r"] = r
-            if include_chip
-                if i == length(detectors)
-                    config["sim_num"] = n_sim * 10
-                end
-            end
-            res, sim_configs = runexp(output_dir, [config])
-            merge!(βs, βio(output_dir, res[1], sim_configs[1]; first_only=true))
-        end
-    end
-    βs = sort(collect(βs), by=x -> x[1])
-    println("Saving βs to $(f_name)...")
-    println("βs: $(βs)")
-    CSV.write(f_name, βs)
-    return (config_hash, βs)
-end
+# """
+# Compose the simulation assuming the first "detector" is the chip.
+# This function aims to output the "correct" geometric factor.
+# """
+# function composeβ(output_dir, detectors::Vector{RectBox{T}}, n_sim::Int; overwrite=false, include_chip=true) where {T<:Real}
+#     config = Dict{String,Any}("sim_num" => n_sim)
+#     config["detectors"] = detectors
+#     config_hash = hash(config)
+#     println("composeβ config hash: $(config_hash)")
+#     # Check the output table
+#     f_name = joinpath(output_dir, "comb_table_H$(config_hash).csv")
+#     if isfile(f_name) && !overwrite
+#         println("$(f_name) found, loading...")
+#         βs = CSV.File(f_name) |> Dict{String,Float64}
+#     else
+#         βs = Dict{String,Float64}()
+#         for i in eachindex(detectors)
+#             dets = circshift(detectors, -i)
+#             config["detectors"] = dets
+#             config["center"] = nothing
+#             if include_chip
+#                 if i == length(detectors)
+#                     config["sim_num"] = n_sim * 10
+#                 end
+#             end
+#             res, sim_configs = runexp(output_dir, [config])
+#             merge!(βs, βio(output_dir, res[1], sim_configs[1]))
+#         end
+#         config["sim_num"] = n_sim
+#         for i in eachindex(detectors)
+#             dets = circshift(detectors, -i)
+#             config["detectors"] = dets
+#             config["center"] = dets[1].position |> Tuple
+#             ℓ, r = _get_ℓ_r(dets)
+#             config["ℓ"] = ℓ
+#             config["r"] = r
+#             if include_chip
+#                 if i == length(detectors)
+#                     config["sim_num"] = n_sim * 10
+#                 end
+#             end
+#             res, sim_configs = runexp(output_dir, [config])
+#             merge!(βs, βio(output_dir, res[1], sim_configs[1]; first_only=true))
+#         end
+#     end
+#     βs = sort(collect(βs), by=x -> x[1])
+#     println("Saving βs to $(f_name)...")
+#     println("βs: $(βs)")
+#     CSV.write(f_name, βs)
+#     return (config_hash, βs)
+# end

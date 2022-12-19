@@ -21,7 +21,7 @@ using Infiltrator
 
 # %%
 """
-Test for basic coverage of one box. Returns beta and beta_err multiplied by simulation ℓ^2.
+Test for basic coverage of one box.
 """
 function test_coverage1_hemisimlite(n_sim::Int=800000)
     I₀ = 58
@@ -35,10 +35,9 @@ function test_coverage1_hemisimlite(n_sim::Int=800000)
     # println("R = $R, ℓ = $ℓ")
     (results,) = runhemisimlite(n_sim, box, R, ℓ; center=(0, 0, 0))
 
-    expected_rate = analytic_R(box[1], I₀=I₀)
+    expected_rate = analytic_R(box[1]) * I₀
 
-    @time (int_R, int_result) = analytic_R(box, R, ℓ, seed=1234, I₀=I₀)
-    println("int_R = $int_R")
+    @time int_result = analytic_R(box, seed=1234)
 
     (hit_prob_mean, hit_prob_std, _) = MCIntegration.average(int_result.iterations, init=5)
     # Note the integration already includes the normalization factor 2π/3 * ℓ^2
@@ -115,7 +114,7 @@ function test_coverage3_hemisimlite(n_sim::Int=10000000)
         rate = β * ℓ^2 * 2π / 3 * I₀
         rate_err = β_err * ℓ^2 * 2π / 3 * I₀
 
-        @time (_, int_result) = analytic_R(dets, R, w * 2.5, seed=1234, I₀=I₀)
+        @time int_result = analytic_R(dets, seed=42)
 
         (hit_prob_mean, hit_prob_std, _) = MCIntegration.average(int_result.iterations, init=5)
         # # Note the integration already includes the normalization factor 2π/3 * ℓ^2

@@ -243,9 +243,10 @@ function _fΩ(θ)
 end
 
 """
-Calculates the analytic rate of a box, given the parameters.
+Calculates the analytic rate (assuming unit I₀) of a box, given the parameters.
+Note this rate is inclusive.
 """
-function analytic_R(box::RectBox; I₀::Real=1)::Real
+function analytic_R(box::RectBox)::Real
     # Find the orientations of three sides
     θ₁ = box.orientation[1]
     φ = box.orientation[2]
@@ -257,9 +258,9 @@ function analytic_R(box::RectBox; I₀::Real=1)::Real
     θx = _cart2unitsph(x̂...)[1]
     θy = _cart2unitsph(ŷ...)[1]
     θz = _cart2unitsph(ẑ...)[1]
-    R += _fΩ(θx) * (box.delta_y * box.delta_z) * I₀
-    R += _fΩ(θy) * (box.delta_x * box.delta_z) * I₀
-    R += _fΩ(θz) * (box.delta_x * box.delta_y) * I₀
+    R += _fΩ(θx) * (box.delta_y * box.delta_z)
+    R += _fΩ(θy) * (box.delta_x * box.delta_z)
+    R += _fΩ(θz) * (box.delta_x * box.delta_y)
     return R * box.efficiency
 end
 
@@ -426,38 +427,87 @@ end
 
 
 """
-Calculate the analytic rate of a set of detectors by using MC Integration (hemisphere).
+Calculate the analytic rate (assuming unit I₀) of a set of detectors by using MC Integration (hemisphere).
+This function will determine if the detector vector has the chip in it (detector name being "Chip").
+If yes, then it will optimize the integration over the chip.
 """
-function analytic_R(detectors::Vector{T}, R::Real, ℓ::Real;
-    seed::Union{Int,Nothing}=nothing,
-    I₀::Real=1) where {T<:LabObject{<:Real}}
+function analytic_R(detectors::Vector{T};
+    excluded_detectors::Union{Vector{T},Nothing}=nothing,
+    config::Union{Configuration,Nothing}=nothing,
+    seed::Union{Int,Nothing}=nothing) where {T<:LabObject{<:Real}}
     # Find center of the set of detectors:
     center = SA_F64[0, 0, 0]
+    ℓ = 0
+    chip = false
     for d in detectors
-        center += d.position
+        if d.name == "Chip"
+            chip = true
+            center = d.position
+            # Determine ℓ
+            ℓ = max(d.delta_x, d.delta_y, d.delta_z) * 3.0
+            break
+        else
+            center += d.position
+            ℓ = max(max(d.delta_x, d.delta_y, d.delta_z) * 3.0, ℓ)
+        end
     end
-    center /= length(detectors)
-    θ = MCIntegration.Continuous(0.0, π / 2)
-    φ = MCIntegration.Continuous(0.0, 2π)
-    XY = MCIntegration.Continuous(-ℓ / 2, ℓ / 2, adapt=false)
-    int_config = Configuration(var=(θ, φ, XY), dof=[[1, 1, 2]], userdata=Dict("Ray" => Ray(0.0, 0.0)))
+    if !chip
+        center /= length(detectors)
+    end
+    println("Center: $(center)")
+    println("ℓ: $(ℓ) (m)")
+    # Determine R
+    R = 100.0
+    # for d1 in detectors
+    #     for d2 in detectors
+    #         Δs = norm(d1.position .- d2.position)
+    #         R = max(Δs * 5.0, R)
+    #     end
+    # end
+    println("R: $(R) (m)")
+
+    if config === nothing
+        config = Configuration()
+        θ = MCIntegration.Continuous(0.0, π / 2)
+        φ = MCIntegration.Continuous(0.0, 2π)
+        XY = MCIntegration.Continuous(-ℓ / 2, ℓ / 2, adapt=false)
+        int_config = Configuration(var=(θ, φ, XY), dof=[[1, 1, 2]], userdata=Dict("Ray" => Ray(0.0, 0.0)))
+    else
+        int_config = config
+    end
     if seed !== nothing
         println("Using seed: $seed")
         int_config.seed = seed
         int_config.rng = MersenneTwister(seed)
     end
     prob_integrand = (X, c) -> (sin(X[1][1]) * cos(X[1][1])^2)
-    hit_func = (X, c) -> begin
-        r = c.userdata["Ray"]
-        (θ̃, φ̃, x̃, ỹ) = (π - X[1][1], X[2][1] + π, X[3][1], X[3][2])
-        modifyray!(r, R, center, ℓ; θ=θ̃, φ=φ̃, x=x̃, y=ỹ)
-        return all(d -> isthrough!(r, d, SortedDict{Float64,SVector{3,Float64}}()), detectors)
+    if excluded_detectors !== nothing
+        hit_func = (X, c) -> begin
+            r = c.userdata["Ray"]
+            (θ̃, φ̃, x̃, ỹ) = (π - X[1][1], X[2][1] + π, X[3][1], X[3][2])
+            modifyray!(r, R, center, ℓ; θ=θ̃, φ=φ̃, x=x̃, y=ỹ)
+            return all(d -> isthrough!(r, d, SortedDict{Float64,SVector{3,Float64}}()), detectors) &&
+                   !any(d -> isthrough!(r, d, SortedDict{Float64,SVector{3,Float64}}()), excluded_detectors)
+        end
+    else
+        hit_func = (X, c) -> begin
+            r = c.userdata["Ray"]
+            (θ̃, φ̃, x̃, ỹ) = (π - X[1][1], X[2][1] + π, X[3][1], X[3][2])
+            modifyray!(r, R, center, ℓ; θ=θ̃, φ=φ̃, x=x̃, y=ỹ)
+            return all(d -> isthrough!(r, d, SortedDict{Float64,SVector{3,Float64}}()), detectors)
+        end
     end
     hit_integrand = (X, c) -> begin
         return hit_func(X, c) ? prob_integrand(X, c) : 0.0
     end
-    hit_prob = integrate(hit_integrand, config=int_config, print=-1, neval=1e6, niter=20)
-    return (hit_prob.mean * I₀, hit_prob)
+    if chip
+        neval = 5e6
+    else
+        neval = 1e6
+    end
+    println("neval = $(neval)")
+    hit_prob = integrate(hit_integrand, config=int_config, print=-2, neval=neval, niter=15)
+    return hit_prob
 end
 
 
