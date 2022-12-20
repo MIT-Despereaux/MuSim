@@ -6,7 +6,7 @@ using DataStructures
 using Distributions
 using Combinatorics
 using Random
-using JLD2, CSV
+using JLD2, CSV, DataFrames
 
 """
 Returns the relative direction and error going from center of T1 to center of T2, in spherical coordinates.
@@ -255,6 +255,7 @@ end
 Helper function that takes in the result table corresponding
 to a member of sim_config and the detector "combinations",
 and outputs the inclusive and exclusive geometric factor (β). 
+Output: the β factors are in # of hits, and the multiplication factor is provided at the end.
 The combination should be a list of string, and can be of any order.
 Requires a dict containing the "detect_order": det name -> column#.
 """
@@ -311,16 +312,10 @@ function calculateβ(config, det_order, res, comb; optimize::Bool=false)
     println("Total number of events: $(total_n)")
     inclusive_β_err = sqrt(inclusive_β)
     exclusive_β_err = sqrt(exclusive_β)
-    inclusive_β /= total_n
-    exclusive_β /= total_n
-    inclusive_β *= config["ℓ"]^2 * (2π) / 3
-    exclusive_β *= config["ℓ"]^2 * (2π) / 3
-    inclusive_β_err = inclusive_β_err / total_n * config["ℓ"]^2 * (2π) / 3
-    exclusive_β_err = exclusive_β_err / total_n * config["ℓ"]^2 * (2π) / 3
-    println("Inclusive beta: $(inclusive_β) ± $(inclusive_β_err)")
-    println("Exclusive beta: $(exclusive_β) ± $(exclusive_β_err)")
-    return inclusive_β, exclusive_β
+    mult = 1 / total_n * config["ℓ"]^2
+    return inclusive_β, inclusive_β_err, exclusive_β, exclusive_β_err, mult
 end
+
 
 """
 The MC counterpart of calculating the β factors.
@@ -354,9 +349,9 @@ function βio(output_dir, res, config; savefile=false, overwrite=false)
     f_name = joinpath(output_dir, "comb_table_H$(config_hash).csv")
     if !overwrite && isfile(f_name)
         println("$(f_name) found, loading...")
-        geo_factors = CSV.File(f_name) |> Dict{String,Float64}
+        geo_factors = CSV.File(f_name) |> Dict{String,Vector{Float64}}
     else
-        geo_factors = Dict{String,Float64}()
+        geo_factors = Dict{String,Vector{Float64}}()
         detectors = config["detectors"]
         det_order = Dict{String,Int}(d.name => i for (i, d) in enumerate(detectors))
         # List all combinations
@@ -364,15 +359,16 @@ function βio(output_dir, res, config; savefile=false, overwrite=false)
         for c in combs
             sort!(c)
             # join(β, delim) for concatenation
-            (inclusive_β, exclusive_β) = calculateβ(config, det_order, res, c)
-            # println("Inclusive beta: $(inclusive_β)")
-            # println("Exclusive beta: $(exclusive_β)")
-            geo_factors["inc_beta_$(join(c, "_"))"] = inclusive_β
-            geo_factors["exc_beta_$(join(c, "_"))"] = exclusive_β
+            (inc_β, inc_β_err, exc_β, exc_β_err, mult) = calculateβ(config, det_order, res, c)
+            println("Inclusive beta: $(inc_β) ± $(inc_β_err)")
+            println("Exclusive beta: $(exc_β) ± $(exc_β_err)")
+            println("Inclusive relative err (%): $(100.0 / inc_β_err)")
+            geo_factors["inc_beta_$(join(c, "_"))"] = Vector{Float64}([inc_β, inc_β_err, mult])
+            geo_factors["exc_beta_$(join(c, "_"))"] = Vector{Float64}([exc_β, exc_β_err, mult])
         end
         if savefile
             geo_factors = sort(collect(geo_factors), by=x -> x[1])
-            CSV.write(f_name, geo_factors)
+            CSV.write(f_name, geo_factors, header=["Combination", "beta, beta_err, mult"])
         end
     end
     return geo_factors

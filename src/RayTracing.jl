@@ -244,6 +244,7 @@ end
 
 """
 Calculates the analytic rate (assuming unit I₀) of a box, given the parameters.
+The result needs to be divided by (2π / 3) to be consistent with normalization.
 Note this rate is inclusive.
 """
 function analytic_R(box::RectBox)::Real
@@ -429,6 +430,7 @@ end
 """
 Calculate the analytic rate (assuming unit I₀) of a set of detectors by using MC Integration (hemisphere).
 This function will determine if the detector vector has the chip in it (detector name being "Chip").
+The result needs to be divided by (2π / 3) to be consistent with normalization.
 If yes, then it will optimize the integration over the chip.
 """
 function analytic_R(detectors::Vector{T};

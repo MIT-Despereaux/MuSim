@@ -104,15 +104,23 @@ function test_comparison1(output_dir; n_sim::Int=Int(1e6))
 
     res1 = calculateβ(sim_configs[1], det_order, res[1], ["A", "B"])
     res2 = calculateβ_MC(sim_configs[1], ["A", "B"])
-    println("res_AB_1 = $res1")
+    norm_res1 = [res1[1], res1[3]] .* res1[end] .* 2π / 3
+    norm_res1_err = (1 ./ [res1[2], res1[4]])
+    println("res_AB_1 = $norm_res1")
     println("res_AB_2 = $res2")
-    @test all(.≈(res1, res2, rtol=0.1))
+    for (x, δx, y) in zip(norm_res1, norm_res1_err, res2)
+        @test ≈(x, y, rtol=2δx)
+    end
 
     res1 = calculateβ(sim_configs[1], det_order, res[1], ["A", "C"])
     res2 = calculateβ_MC(sim_configs[1], ["A", "C"])
-    println("res_AC_1 = $res1")
+    norm_res1 = [res1[1], res1[3]] .* res1[end] .* 2π / 3
+    norm_res1_err = (1 ./ [res1[2], res1[4]])
+    println("res_AC_1 = $norm_res1")
     println("res_AC_2 = $res2")
-    @test all(.≈(res1, res2, rtol=0.1))
+    for (x, δx, y) in zip(norm_res1, norm_res1_err, res2)
+        @test ≈(x, y, rtol=2δx)
+    end
 end
 
 
@@ -169,7 +177,7 @@ function main()
     println(OUT_DIR)
     mkpath(OUT_DIR)
 
-    # test_comparison1(OUT_DIR)
+    test_comparison1(OUT_DIR)
     # test_comparison2(OUT_DIR, n_sim=Int(1e6))
     # test_detpos()
 end
