@@ -104,22 +104,26 @@ function test_comparison1(output_dir; n_sim::Int=Int(1e6))
 
     res1 = calculateβ(sim_configs[1], det_order, res[1], ["A", "B"])
     res2 = calculateβ_MC(sim_configs[1], ["A", "B"])
-    norm_res1 = [res1[1], res1[3]] .* res1[end] .* 2π / 3
-    norm_res1_err = (1 ./ [res1[2], res1[4]])
+    norm_res1 = [res1[1], res1[3]] .* 2π / 3
+    norm_res1_err = [res1[2], res1[4]]
+    norm_res2 = [res2[1], res2[3]]
+    norm_res2_err = [res2[2], res2[4]]
     println("res_AB_1 = $norm_res1")
-    println("res_AB_2 = $res2")
-    for (x, δx, y) in zip(norm_res1, norm_res1_err, res2)
-        @test ≈(x, y, rtol=2δx)
+    println("res_AB_2 = $norm_res2")
+    for (x, δx, y, δy) in zip(norm_res1, norm_res1_err, norm_res2, norm_res2_err)
+        @test ≈(x, y, atol=2√((δx)^2 + (δy)^2))
     end
 
     res1 = calculateβ(sim_configs[1], det_order, res[1], ["A", "C"])
     res2 = calculateβ_MC(sim_configs[1], ["A", "C"])
-    norm_res1 = [res1[1], res1[3]] .* res1[end] .* 2π / 3
-    norm_res1_err = (1 ./ [res1[2], res1[4]])
+    norm_res1 = [res1[1], res1[3]] .* 2π / 3
+    norm_res1_err = [res1[2], res1[4]]
+    norm_res2 = [res2[1], res2[3]]
+    norm_res2_err = [res2[2], res2[4]]
     println("res_AC_1 = $norm_res1")
-    println("res_AC_2 = $res2")
-    for (x, δx, y) in zip(norm_res1, norm_res1_err, res2)
-        @test ≈(x, y, rtol=2δx)
+    println("res_AC_2 = $norm_res2")
+    for (x, δx, y, δy) in zip(norm_res1, norm_res1_err, norm_res2, norm_res2_err)
+        @test ≈(x, y, atol=2√((δx)^2 + (δy)^2))
     end
 end
 
@@ -137,15 +141,14 @@ function test_comparison2(output_dir; n_sim::Int=Int(1e6))
     config["R"] = 100.0
     res, sim_configs = runexp(output_dir, [config])
     βs1 = βio(output_dir, res[1], sim_configs[1]; savefile=true, overwrite=false)
-    βs1 = Dict(βs1)
+    return
 
     βs2 = βio_MC(output_dir, sim_configs[1]; savefile=true, overwrite=true)
-    βs2 = Dict(βs2)
 
-    for k in keys(βs1)
-        println("βs1[$k] = $(βs1[k])")
-        println("βs2[$k] = $(βs2[k])")
-    end
+    # for k in keys(βs1)
+    #     println("βs1[$k] = $(βs1[k])")
+    #     println("βs2[$k] = $(βs2[k])")
+    # end
 end
 
 

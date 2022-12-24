@@ -505,10 +505,10 @@ function analytic_R(detectors::Vector{T};
     if chip
         neval = 5e6
     else
-        neval = 1e6
+        neval = 2e6
     end
     println("neval = $(neval)")
-    hit_prob = integrate(hit_integrand, config=int_config, print=-2, neval=neval, niter=15)
+    hit_prob = integrate(hit_integrand, config=int_config, print=-1, neval=neval, niter=15)
     return hit_prob
 end
 

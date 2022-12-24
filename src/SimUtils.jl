@@ -6,7 +6,8 @@ using DataStructures
 using Distributions
 using Combinatorics
 using Random
-using JLD2, CSV, DataFrames
+using JLD2, CSV
+using DataFrames
 
 """
 Returns the relative direction and error going from center of T1 to center of T2, in spherical coordinates.
@@ -313,7 +314,8 @@ function calculateβ(config, det_order, res, comb; optimize::Bool=false)
     inclusive_β_err = sqrt(inclusive_β)
     exclusive_β_err = sqrt(exclusive_β)
     mult = 1 / total_n * config["ℓ"]^2
-    return inclusive_β, inclusive_β_err, exclusive_β, exclusive_β_err, mult
+
+    return inclusive_β * mult, inclusive_β_err * mult, exclusive_β * mult, exclusive_β_err * mult, inclusive_β, exclusive_β
 end
 
 
@@ -334,7 +336,7 @@ function calculateβ_MC(config, comb)
     exclusive_β_res = analytic_R(included_dets, excluded_detectors=missing_dets, config=inclusive_β_res.config)
     println("Inclusive beta: $(inclusive_β_res.mean) ± $(inclusive_β_res.stdev)")
     println("Exclusive beta: $(exclusive_β_res.mean) ± $(exclusive_β_res.stdev)")
-    return inclusive_β_res.mean, exclusive_β_res.mean
+    return inclusive_β_res.mean, inclusive_β_res.stdev, exclusive_β_res.mean, exclusive_β_res.stdev
 end
 
 
@@ -349,9 +351,13 @@ function βio(output_dir, res, config; savefile=false, overwrite=false)
     f_name = joinpath(output_dir, "comb_table_H$(config_hash).csv")
     if !overwrite && isfile(f_name)
         println("$(f_name) found, loading...")
-        geo_factors = CSV.File(f_name) |> Dict{String,Vector{Float64}}
+        geo_factors = CSV.File(f_name) |> DataFrame
     else
-        geo_factors = Dict{String,Vector{Float64}}()
+        gf_name = String[]
+        gf_β = Float64[]
+        gf_β_err = Float64[]
+        gf_n_hits = Int64[]
+
         detectors = config["detectors"]
         det_order = Dict{String,Int}(d.name => i for (i, d) in enumerate(detectors))
         # List all combinations
@@ -359,16 +365,25 @@ function βio(output_dir, res, config; savefile=false, overwrite=false)
         for c in combs
             sort!(c)
             # join(β, delim) for concatenation
-            (inc_β, inc_β_err, exc_β, exc_β_err, mult) = calculateβ(config, det_order, res, c)
+            (inc_β, inc_β_err, exc_β, exc_β_err, inc_n_hits, exc_n_hits) = calculateβ(config, det_order, res, c)
             println("Inclusive beta: $(inc_β) ± $(inc_β_err)")
             println("Exclusive beta: $(exc_β) ± $(exc_β_err)")
             println("Inclusive relative err (%): $(100.0 / inc_β_err)")
-            geo_factors["inc_beta_$(join(c, "_"))"] = Vector{Float64}([inc_β, inc_β_err, mult])
-            geo_factors["exc_beta_$(join(c, "_"))"] = Vector{Float64}([exc_β, exc_β_err, mult])
+            push!(gf_name, "inc_beta_$(join(c, "_"))")
+            push!(gf_name, "exc_beta_$(join(c, "_"))")
+            push!(gf_β, inc_β)
+            push!(gf_β, exc_β)
+            push!(gf_β_err, inc_β_err)
+            push!(gf_β_err, exc_β_err)
+            push!(gf_n_hits, inc_n_hits)
+            push!(gf_n_hits, exc_n_hits)
         end
+        geo_factors_dict = OrderedDict("combination" => gf_name, "beta" => gf_β, "beta_err" => gf_β_err, "n_hits" => gf_n_hits, "n_total" => repeat([config["sim_num"]], length(gf_name)))
+        geo_factors = DataFrame(geo_factors_dict)
+        println(geo_factors)
         if savefile
-            geo_factors = sort(collect(geo_factors), by=x -> x[1])
-            CSV.write(f_name, geo_factors, header=["Combination", "beta, beta_err, mult"])
+            sort!(geo_factors, :combination)
+            CSV.write(f_name, geo_factors)
         end
     end
     return geo_factors
@@ -395,9 +410,10 @@ function βio_MC(output_dir, config; savefile=false, overwrite=false)
         for c in combs
             sort!(c)
             # join(β, delim) for concatenation
-            (inclusive_β, exclusive_β) = calculateβ_MC(config, c)
-            # println("Inclusive beta: $(inclusive_β)")
-            # println("Exclusive beta: $(exclusive_β)")
+            (inc_β, inc_β_err, exc_β, exc_β_err) = calculateβ_MC(config, c)
+            println("Inclusive beta: $(inc_β) ± $(inc_β_err)")
+            println("Exclusive beta: $(exc_β) ± $(exc_β_err)")
+            println("Inclusive relative err (%): $(100.0 / inc_β_err)")
             geo_factors["inc_beta_$(join(c, "_"))"] = inclusive_β
             geo_factors["exc_beta_$(join(c, "_"))"] = exclusive_β
         end
