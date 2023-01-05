@@ -82,10 +82,12 @@ end
 
 """
 Runs the simulation with a hemispherical generating surface. 
+The user can provide an optimized configuration for sampling.
 """
 function runhemisim(n_sim::Int, detectors::Vector{T}, R::Real, ℓ::Real;
     exec=ThreadedEx(),
-    center::NTuple{3,Real}=(0, 0, 0)
+    center::NTuple{3,Real}=(0, 0, 0),
+    config::Union{MCIntegration.Configuration,Nothing}=nothing
 ) where {T<:LabObject{<:Real}}
     let center = center
         @floop exec for i = 1:n_sim
@@ -94,15 +96,25 @@ function runhemisim(n_sim::Int, detectors::Vector{T}, R::Real, ℓ::Real;
                 ray = Ray(0.0, 0.0)
                 crosses = SortedDict{Float64,SVector{3,Float64}}()
                 hit_vec = falses(length(detectors))
-                i_vec = zeros(length(detectors))
-                j_vec = zeros(length(detectors))
+                i_vec = zeros(Int64, length(detectors))
+                j_vec = zeros(Int64, length(detectors))
                 crx = Vector{Union{Missing,Dict}}(missing, length(detectors))
                 dir = Vector{Union{Missing,Dict}}(missing, length(detectors))
             end
             # Set the hit_vec to false to prepare for a new ray
             hit_vec .*= false
-            # Generate a random ray
-            modifyray!(ray, R, center, ℓ)
+            # Generate ray parameters if configuration is provided
+            if config !== nothing
+                θ_dist = config.var[1]
+                φ_dist = config.var[2]
+                θ̃ = randContinuous(θ_dist)
+                φ̃ = randContinuous(φ_dist)
+                ww = cos(θ̃)^2 * sin(θ̃) / (probContinuous(θ_dist, θ̃) * probContinuous(φ_dist, φ̃))
+                modifyray!(ray, R, center, ℓ; θ=θ̃, φ=φ̃)
+            else
+                ww = 1.0
+                modifyray!(ray, R, center, ℓ)
+            end
             # Loop through each dectector to fill the pre-allocated vectors
             for (j, d) in enumerate(detectors)
                 hit = isthrough!(ray, d, crosses)
@@ -124,12 +136,14 @@ function runhemisim(n_sim::Int, detectors::Vector{T}, R::Real, ℓ::Real;
             # Note that for threaded executions, the initial values will be
             # assigned to the variables (e.g. ii) at the end of the loop
             # This means e.g. ii will be Int[] at some time
-            @reduce() do (i_list = Float64[]; ii),
-            (j_list = Float64[]; jj),
+            @reduce() do (i_list = Int64[]; ii),
+            (j_list = Int64[]; jj),
+            (weight = Float64[]; ww),
             (crx_pts = [Dict{Int,Matrix{Float64}}() for i = 1:length(detectors)]; crx),
             (ray_dirs = [Dict{Int,Vector{Float64}}() for i = 1:length(detectors)]; dir)
                 append!(i_list, ii)
                 append!(j_list, jj)
+                append!(weight, ww)
                 for (j, c) in enumerate(crx)
                     if !ismissing(c) && !isempty(c)
                         merge!(crx_pts[j], crx[j])
@@ -139,7 +153,7 @@ function runhemisim(n_sim::Int, detectors::Vector{T}, R::Real, ℓ::Real;
             end
         end
         results = sparse(i_list, j_list, trues(length(i_list)), n_sim, length(detectors))
-        return (results, crx_pts, ray_dirs)
+        return (results, crx_pts, ray_dirs, weight)
     end
 end
 
@@ -203,7 +217,12 @@ and adopt the naming convention "sim_cache_H#.jld2":
 H -- Hash of the config dict;
 The outputs are vectors of simulation results.
 """
-function runexp(output_dir, sim_configs; batch_size=Int(1e6), lite=true, overwrite=false)
+function runexp(output_dir, sim_configs;
+    batch_size=Int(1e6),
+    lite=true,
+    overwrite=false,
+    mc_config::Union{MCIntegration.Configuration,Nothing}=nothing
+)
     # Run the simulation using the setup and return raw results
     # Print number of threads
     @printf("Total threads: %d\n", Threads.nthreads())
@@ -240,7 +259,7 @@ function runexp(output_dir, sim_configs; batch_size=Int(1e6), lite=true, overwri
             if lite
                 push!(results_tmp, runhemisimlite(batch_sim_num, detectors, R, ℓ; center=center))
             else
-                push!(results_tmp, runhemisim(batch_sim_num, detectors, R, ℓ; center=center))
+                push!(results_tmp, runhemisim(batch_sim_num, detectors, R, ℓ; center=center, config=mc_config))
             end
             @save f_name config detectors results_tmp
         end

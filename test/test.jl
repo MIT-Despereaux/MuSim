@@ -1,4 +1,62 @@
-using StatsBase, Distributions, Interpolations, Plots, MuSim
+using StatsBase, Distributions, Interpolations, Plots, MuSim, LinearAlgebra
+
+# %%
+
+# Construct two planar surfaces oriented at θ
+w = 1.0
+d = 10.0 # r distance between centers (on a sphere)
+θ1 = 11π / 60
+θ2 = θ1 + deg2rad(2)
+box1 = RectBox("A", w, w, 0.1; orientation=(θ1, 0))
+box2 = RectBox("B", w, w, 0.1; position=(sin(θ1) * d, 0, cos(θ1) * d), orientation=(θ1, 0))
+box3 = RectBox("C", w, w, 0.1; position=(sin(θ2) * d * 1.2, 0, cos(θ2) * d * 1.2), orientation=(θ2, 0))
+dets = [box1, box2, box3]
+
+sim_configs = Dict{String,Any}[]
+config = Dict{String,Any}("sim_num" => Int(1e6))
+# The radius of the hemisphere in [m]
+config["ℓ"] = 2.5
+config["R"] = 10.0
+config["center"] = (0, 0, 0)
+config["detectors"] = dets
+push!(sim_configs, config)
+
+# %%
+included_dets = [box1]
+res = analytic_R(included_dets)
+
+# %%
+OUT_DIR = abspath(joinpath(dirname(@__FILE__), "test_cache"))
+results, sim_configs = runexp(OUT_DIR, sim_configs; lite=false, overwrite=true, mc_config=res.config)
+
+# %%
+θs = [v[1] for (k, v) in results[1][1][3][1]]
+histogram(θs, bins=500, normalize=:pdf, alpha=0.5)
+
+# %%
+det = 1
+Ds = [norm(diff(v, dims=1)) for (k, v) in results[1][1][2][det]]
+weights = results[1][1][end][results[1][1][1][:, det]]
+histogram(Ds, bins=500, weights=weights, normalize=:pdf, alpha=0.5, yscale=:log10)
+
+
+# %%
+θ = res.config.var[1]
+itp = interpContinuous(θ)
+plot(0:0.005:dist.grid[end], itp.(0:0.005:dist.grid[end]))
+plot(0:0.005:dist.grid[end], probContinuous(θ, 0:0.005:dist.grid[end]))
+obs = randContinuous(θ; n=1000000)
+histogram!(obs, bins=500, normalize=:pdf, alpha=0.5)
+
+# %%
+φ = res.config.var[2]
+itp = interpContinuous(φ)
+plot(0:0.005:dist.grid[end], itp.(0:0.005:dist.grid[end]))
+plot(0:0.005:dist.grid[end], probContinuous(φ, 0:0.005:dist.grid[end]))
+obs = randContinuous(φ; n=1000000)
+histogram!(obs, bins=500, normalize=:pdf, alpha=0.5)
+
+# %%
 # Creating original samples...
 C = Cauchy(0, 0.01)
 obs = rand(C, 100000)

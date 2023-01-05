@@ -8,6 +8,8 @@ using QuadGK
 using Roots
 using JLD2
 using StatsBase
+using MCIntegration
+using Interpolations
 
 CACHE_DIR = joinpath(dirname(@__FILE__), "cache")
 mkpath(CACHE_DIR)
@@ -154,7 +156,42 @@ function rayplaneint(dir::SVector{3,Float64}, r_pos::SVector{3,Float64}, plane_n
     end
 end
 
+
+"""
+Sample from the Continuous variable from MCIntegration.
+"""
+function randContinuous(x::MCIntegration.Continuous{G}; n=1) where {G<:AbstractVector}
+    xs = range(0, stop=1; length=length(x.grid))
+    inv_itp = Interpolations.scale(interpolate(x.grid, BSpline(Linear())), xs)
+    if n > 1
+        return inv_itp.(rand(n))
+    else
+        return inv_itp(rand())
+    end
+end
+
+
+"""
+Interpolate the Continuous variable from MCIntegration.
+"""
+function interpContinuous(x::MCIntegration.Continuous{G}) where {G<:AbstractVector}
+    xs = collect(range(0, stop=1; length=length(x.grid)))
+    itp = interpolate(x.grid, xs, FritschButlandMonotonicInterpolation())
+    return itp
+end
+
+
+"""
+Calculate the PDF of the Continuous variable from MCIntegration.
+"""
+function probContinuous(x::MCIntegration.Continuous{G}, x0::Union{Real,AbstractArray}) where {G<:AbstractVector}
+    itp = interpContinuous(x)
+    return map(x -> Interpolations.gradient(itp, x)[1], x0)
+end
+
+
 # --- Scratch ---
+
 
 # μ_dist_cache_fname = "mu_spawn_dist"
 # μ_dist_cache_file = joinpath(CACHE_DIR, μ_dist_cache_fname * ".jld2")
