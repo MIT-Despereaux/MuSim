@@ -470,7 +470,8 @@ function analytic_R(detectors::Vector{T};
 
     if config === nothing
         config = Configuration()
-        θ = MCIntegration.Continuous(0.0, π / 2)
+        # Note these are ray directions
+        θ = MCIntegration.Continuous(π / 2, 1π)
         φ = MCIntegration.Continuous(0.0, 2π)
         XY = MCIntegration.Continuous(-ℓ / 2, ℓ / 2, adapt=false)
         int_config = Configuration(var=(θ, φ, XY), dof=[[1, 1, 2]], userdata=Dict("Ray" => Ray(0.0, 0.0)))
@@ -486,7 +487,7 @@ function analytic_R(detectors::Vector{T};
     if excluded_detectors !== nothing
         hit_func = (X, c) -> begin
             r = c.userdata["Ray"]
-            (θ̃, φ̃, x̃, ỹ) = (π - X[1][1], X[2][1] + π, X[3][1], X[3][2])
+            (θ̃, φ̃, x̃, ỹ) = (X[1][1], X[2][1], X[3][1], X[3][2])
             modifyray!(r, R, center, ℓ; θ=θ̃, φ=φ̃, x=x̃, y=ỹ)
             return all(d -> isthrough!(r, d, SortedDict{Float64,SVector{3,Float64}}()), detectors) &&
                    !any(d -> isthrough!(r, d, SortedDict{Float64,SVector{3,Float64}}()), excluded_detectors)
@@ -494,7 +495,7 @@ function analytic_R(detectors::Vector{T};
     else
         hit_func = (X, c) -> begin
             r = c.userdata["Ray"]
-            (θ̃, φ̃, x̃, ỹ) = (π - X[1][1], X[2][1] + π, X[3][1], X[3][2])
+            (θ̃, φ̃, x̃, ỹ) = (X[1][1], X[2][1], X[3][1], X[3][2])
             modifyray!(r, R, center, ℓ; θ=θ̃, φ=φ̃, x=x̃, y=ỹ)
             return all(d -> isthrough!(r, d, SortedDict{Float64,SVector{3,Float64}}()), detectors)
         end
