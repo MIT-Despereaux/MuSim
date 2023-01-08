@@ -160,9 +160,11 @@ end
 """
 Sample from the Continuous variable from MCIntegration.
 """
-function randContinuous(x::MCIntegration.Continuous{G}; n=1) where {G<:AbstractVector}
-    xs = range(0, stop=1; length=length(x.grid))
-    inv_itp = Interpolations.scale(interpolate(x.grid, BSpline(Linear())), xs)
+function randContinuous(x::MCIntegration.Continuous{G}; n=1, inv_itp=nothing) where {G<:AbstractVector}
+    if inv_itp === nothing
+        xs = range(0, stop=1; length=length(x.grid))
+        inv_itp = Interpolations.scale(interpolate(x.grid, BSpline(Linear())), xs)
+    end
     if n > 1
         return inv_itp.(rand(n))
     else

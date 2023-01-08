@@ -89,7 +89,20 @@ function runhemisim(n_sim::Int, detectors::Vector{T}, R::Real, ℓ::Real;
     center::NTuple{3,Real}=(0, 0, 0),
     config::Union{MCIntegration.Configuration,Nothing}=nothing
 ) where {T<:LabObject{<:Real}}
-    let center = center
+    # Interpolation
+    if config !== nothing
+        θ_dist = config.var[1]
+        φ_dist = config.var[2]
+        xs = range(0, stop=1; length=length(θ_dist.grid))
+        inv_itp_θ = Interpolations.scale(interpolate(θ_dist.grid, BSpline(Linear())), xs)
+        inv_itp_φ = Interpolations.scale(interpolate(φ_dist.grid, BSpline(Linear())), xs)
+    else
+        θ_dist = nothing
+        φ_dist = nothing
+        inv_itp_θ = nothing
+        inv_itp_φ = nothing
+    end
+    let config = config, θ_dist = θ_dist, φ_dist = φ_dist, inv_itp_θ = inv_itp_θ, inv_itp_φ = inv_itp_φ
         @floop exec for i = 1:n_sim
             # Private mutable variables
             @init begin
@@ -105,11 +118,10 @@ function runhemisim(n_sim::Int, detectors::Vector{T}, R::Real, ℓ::Real;
             hit_vec .*= false
             # Generate ray parameters if configuration is provided
             if config !== nothing
-                θ_dist = config.var[1]
-                φ_dist = config.var[2]
-                θ̃ = randContinuous(θ_dist)
-                φ̃ = randContinuous(φ_dist)
-                ww = cos(θ̃)^2 * sin(θ̃) / (probContinuous(θ_dist, θ̃) * probContinuous(φ_dist, φ̃))
+                θ̃ = randContinuous(θ_dist; inv_itp=inv_itp_θ)
+                φ̃ = randContinuous(φ_dist; inv_itp=inv_itp_φ)
+                # ww = cos(θ̃)^2 * sin(θ̃) / (probContinuous(θ_dist, θ̃) * probContinuous(φ_dist, φ̃))
+                ww = 1.0
                 modifyray!(ray, R, center, ℓ; θ=θ̃, φ=φ̃)
             else
                 ww = 1.0
