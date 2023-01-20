@@ -86,7 +86,7 @@ The user can provide an optimized configuration for sampling.
 """
 function runhemisim(n_sim::Int, detectors::Vector{T}, R::Real, ℓ::Real;
     exec=ThreadedEx(),
-    center::NTuple{3,Real}=(0, 0, 0),
+    center::Union{NTuple{3,Real},SVector{3}}=(0, 0, 0),
     config::Union{MCIntegration.Configuration,Nothing}=nothing
 ) where {T<:LabObject{<:Real}}
     # Interpolation
@@ -176,7 +176,7 @@ This is the "vanilla" version without any optimizations.
 """
 function runhemisimlite(n_sim::Int, detectors::Vector{T}, R::Real, ℓ::Real;
     exec=ThreadedEx(),
-    center::NTuple{3,Real}=(0, 0, 0)
+    center::Union{NTuple{3,Real},SVector{3}}=(0, 0, 0)
 ) where {T<:LabObject{<:Real}}
     # See https://juliafolds.github.io/FLoops.jl/dev/howto/avoid-box/#avoid-box for the "let" phrase.
     let center = center
@@ -388,6 +388,7 @@ function βio(output_dir, res, config; savefile=false, overwrite=false)
         gf_β = Float64[]
         gf_β_err = Float64[]
         gf_n_hits = Int64[]
+        gf_analytic = Float64[]
 
         detectors = config["detectors"]
         det_order = Dict{String,Int}(d.name => i for (i, d) in enumerate(detectors))
@@ -399,7 +400,17 @@ function βio(output_dir, res, config; savefile=false, overwrite=false)
             (inc_β, inc_β_err, exc_β, exc_β_err, inc_n_hits, exc_n_hits) = calculateβ(config, det_order, res, c)
             println("Inclusive beta: $(inc_β) ± $(inc_β_err)")
             println("Exclusive beta: $(exc_β) ± $(exc_β_err)")
-            println("Inclusive relative err (%): $(100.0 / inc_β_err)")
+            println("Inclusive relative err (%): $(100.0 / sqrt(inc_n_hits))")
+            if length(c) == 1
+                d = detectors[det_order[c[1]]]
+                analytic = analytic_R(d)
+                analytic /= (2π / 3)
+                println("Analytic rate: $(analytic)")
+                push!(gf_analytic, analytic)
+                push!(gf_analytic, 0.0)
+            else
+                append!(gf_analytic, [0.0, 0.0])
+            end
             push!(gf_name, "inc_beta_$(join(c, "_"))")
             push!(gf_name, "exc_beta_$(join(c, "_"))")
             push!(gf_β, inc_β)
@@ -409,7 +420,7 @@ function βio(output_dir, res, config; savefile=false, overwrite=false)
             push!(gf_n_hits, inc_n_hits)
             push!(gf_n_hits, exc_n_hits)
         end
-        geo_factors_dict = OrderedDict("combination" => gf_name, "beta" => gf_β, "beta_err" => gf_β_err, "n_hits" => gf_n_hits, "n_total" => repeat([config["sim_num"]], length(gf_name)))
+        geo_factors_dict = OrderedDict("combination" => gf_name, "beta" => gf_β, "beta_err" => gf_β_err, "n_hits" => gf_n_hits, "n_total" => repeat([config["sim_num"]], length(gf_name)), "analytic" => gf_analytic)
         geo_factors = DataFrame(geo_factors_dict)
         println(geo_factors)
         if savefile
@@ -444,7 +455,7 @@ function βio_MC(output_dir, config; savefile=false, overwrite=false)
             (inc_β, inc_β_err, exc_β, exc_β_err) = calculateβ_MC(config, c)
             println("Inclusive beta: $(inc_β) ± $(inc_β_err)")
             println("Exclusive beta: $(exc_β) ± $(exc_β_err)")
-            println("Inclusive relative err (%): $(100.0 / inc_β_err)")
+            println("Inclusive relative err (%): $(100.0 * inc_β_err/ inc_β)")
             geo_factors["inc_beta_$(join(c, "_"))"] = inclusive_β
             geo_factors["exc_beta_$(join(c, "_"))"] = exclusive_β
         end
