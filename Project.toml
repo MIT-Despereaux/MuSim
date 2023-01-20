@@ -1,7 +1,7 @@
 name = "MuSim"
 uuid = "c3214c7d-7b42-48aa-ac43-a01b1ed9a4b7"
 authors = ["charstnut <36014603+charstnut@users.noreply.github.com>", "Wouter-VDP <woutervdp@gmail.com>"]
-version = "0.2.6"
+version = "0.2.7"
 
 [deps]
 BangBang = "198e06fe-97b7-11e9-32a5-e1d131e6ad66"
