@@ -10,77 +10,6 @@ using JLD2, CSV
 using DataFrames
 
 """
-Returns the relative direction and error going from center of T1 to center of T2, in spherical coordinates.
-!!! NEEDS FIX: FROM EDGE OF T1 to EDGE OF T2
-"""
-function _relativedir(T1::RectBox{T}, T2::RectBox{T}) where {T<:Real}
-    center_1 = T1.position
-    center_2 = T2.position
-    dir = center_2 - center_1
-    (θ, φ) = _cart2unitsph(dir...)
-    θ_max = θ
-    θ_min = θ
-    φ_max = φ
-    φ_min = φ
-    for x_sign_2 in (-1, 1)
-        for y_sign_2 in (-1, 1)
-            for z_sign_2 in (-1, 1)
-                for x_sign_1 in (-1, 1)
-                    for y_sign_1 in (-1, 1)
-                        for z_sign_1 in (-1, 1)
-                            v2 = (x_sign_2 * T2.delta_x / 2, y_sign_2 * T2.delta_y / 2, z_sign_2 * T2.delta_z / 2) |> SVector{3,Float64}
-                            v2 = _rotate(v2, T2.orientation..., 0)
-                            v1 = (x_sign_1 * T1.delta_x / 2, y_sign_1 * T1.delta_y / 2, z_sign_1 * T1.delta_z / 2) |> SVector{3,Float64}
-                            v1 = _rotate(v1, T1.orientation..., 0)
-                            dir2 = center_2 + v2 - (center_1 + v1)
-                            (θ2, φ2) = _cart2unitsph(dir2...)
-                            θ_max = max(θ_max, θ2)
-                            θ_min = min(θ_min, θ2)
-                            φ_max = max(φ_max, φ2)
-                            φ_min = min(φ_min, φ2)
-                        end
-                    end
-                end
-            end
-        end
-    end
-    Δθ = θ_max - θ_min
-    Δφ = φ_max - φ_min
-    return (θ, φ, Δθ, Δφ)
-end
-
-
-# """
-# Determines the simulation parameters by centering on the first detector.
-# """
-# function _get_ℓ_r(detectors::Vector{RectBox{T}}) where {T<:Real}
-#     (x, y, z) = (detectors[1].delta_x, detectors[1].delta_y, detectors[1].delta_z)
-#     ℓ = √(max(x * y, x * z, y * z)) * 5
-#     r = 100
-#     return ℓ, r
-# end
-
-"""
-Helper function that samples the detector positions in accordance of "fuzzy" detectors.
-"δr" is the 1σ position error.
-"""
-function gendetectorpos(detectors::Vector{RectBox{T}}, δr::Real; n::Int=10, seed::Union{Nothing,Int}=nothing) where {T<:Real}
-    generated_detectors = []
-    if seed !== nothing
-        Random.seed!(seed)
-    end
-    for i in 1:n
-        dets = deepcopy(detectors)
-        for d in dets
-            d.position += rand(Normal(0, δr), 3)
-        end
-        push!(generated_detectors, dets)
-    end
-    return generated_detectors
-end
-
-
-"""
 Runs the simulation with a hemispherical generating surface. 
 The user can provide an optimized configuration for sampling.
 """
@@ -171,16 +100,21 @@ end
 
 
 """
-Runs the simulation with a hemispherical generating surface, outputting only the sparse matrix.
+Runs the simulation with a hemispherical generating surface.
+The output contains the following sparse matrices: T/F table; traversed distances;
 This is the "vanilla" version without any optimizations.
 """
-function runhemisimlite(n_sim::Int, detectors::Vector{T}, R::Real, ℓ::Real;
+function runhemisimlite(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
     exec=ThreadedEx(),
-    center::Union{NTuple{3,Real},SVector{3}}=(0, 0, 0)
+    center::Union{NTuple{3,Real},SVector{3}}=(0, 0, 0),
+    s::μPDFSettings=μPDFSettings()
 ) where {T<:LabObject{<:Real}}
+    # Generate the HMC Eμ and θ samples
+    p = μPDF()
+    samples = drawsamples(p, s, N=N)
     # See https://juliafolds.github.io/FLoops.jl/dev/howto/avoid-box/#avoid-box for the "let" phrase.
     let center = center
-        @floop exec for i = 1:n_sim
+        @floop exec for i = 1:N
             # Private mutable variables
             @init begin
                 ray = Ray(0.0, 0.0)
@@ -188,33 +122,41 @@ function runhemisimlite(n_sim::Int, detectors::Vector{T}, R::Real, ℓ::Real;
                 hit_vec = falses(length(detectors))
                 i_vec = zeros(length(detectors))
                 j_vec = zeros(length(detectors))
+                dist = zeros(length(detectors))
             end
             # Set the hit_vec to false to prepare for a new ray
             hit_vec .*= false
             # Generate a random ray
-            modifyray!(ray, R, center, ℓ)
+            θ̃ = samples[2, i]
+            modifyray!(ray, R, center, ℓ; θ=θ̃)
             # Loop through each dectector to fill the pre-allocated vectors
             for (j, d) in enumerate(detectors)
                 hit = isthrough!(ray, d, crosses)
                 if hit
                     i_vec[j] = i
                     j_vec[j] = j
-                    hit_vec[j] = hit
+                    hit_vec[j] = true
+                    d = norm(last(crosses)[2] - first(crosses)[2])
+                    dist[j] = d
                     empty!(crosses)
                 end
             end
             # Hit indices to be filled
             ii = i_vec[hit_vec]
             jj = j_vec[hit_vec]
+            dd = dist[hit_vec]
             # Reduce the accumulators
             @reduce() do (i_list = Float64[]; ii),
-            (j_list = Float64[]; jj)
+            (j_list = Float64[]; jj),
+            (dist_list = Float64[]; dd)
                 append!!(i_list, ii)
                 append!!(j_list, jj)
+                append!!(dist_list, dd)
             end
         end
-        results = sparse(i_list, j_list, trues(length(i_list)), n_sim, length(detectors))
-        return (results,)
+        TFtable = sparse(i_list, j_list, trues(length(i_list)), N, length(detectors))
+        dist_table = sparse(i_list, j_list, dist_list, N, length(detectors))
+        return (TFtable, dist_table, copy(samples[1, :]))
     end
 end
 
@@ -594,3 +536,74 @@ end
 #     CSV.write(f_name, βs)
 #     return (config_hash, βs)
 # end
+
+
+"""
+Returns the relative direction and error going from center of T1 to center of T2, in spherical coordinates.
+!!! NEEDS FIX: FROM EDGE OF T1 to EDGE OF T2
+"""
+function _relativedir(T1::RectBox{T}, T2::RectBox{T}) where {T<:Real}
+    center_1 = T1.position
+    center_2 = T2.position
+    dir = center_2 - center_1
+    (θ, φ) = _cart2unitsph(dir...)
+    θ_max = θ
+    θ_min = θ
+    φ_max = φ
+    φ_min = φ
+    for x_sign_2 in (-1, 1)
+        for y_sign_2 in (-1, 1)
+            for z_sign_2 in (-1, 1)
+                for x_sign_1 in (-1, 1)
+                    for y_sign_1 in (-1, 1)
+                        for z_sign_1 in (-1, 1)
+                            v2 = (x_sign_2 * T2.delta_x / 2, y_sign_2 * T2.delta_y / 2, z_sign_2 * T2.delta_z / 2) |> SVector{3,Float64}
+                            v2 = _rotate(v2, T2.orientation..., 0)
+                            v1 = (x_sign_1 * T1.delta_x / 2, y_sign_1 * T1.delta_y / 2, z_sign_1 * T1.delta_z / 2) |> SVector{3,Float64}
+                            v1 = _rotate(v1, T1.orientation..., 0)
+                            dir2 = center_2 + v2 - (center_1 + v1)
+                            (θ2, φ2) = _cart2unitsph(dir2...)
+                            θ_max = max(θ_max, θ2)
+                            θ_min = min(θ_min, θ2)
+                            φ_max = max(φ_max, φ2)
+                            φ_min = min(φ_min, φ2)
+                        end
+                    end
+                end
+            end
+        end
+    end
+    Δθ = θ_max - θ_min
+    Δφ = φ_max - φ_min
+    return (θ, φ, Δθ, Δφ)
+end
+
+
+# """
+# Determines the simulation parameters by centering on the first detector.
+# """
+# function _get_ℓ_r(detectors::Vector{RectBox{T}}) where {T<:Real}
+#     (x, y, z) = (detectors[1].delta_x, detectors[1].delta_y, detectors[1].delta_z)
+#     ℓ = √(max(x * y, x * z, y * z)) * 5
+#     r = 100
+#     return ℓ, r
+# end
+
+"""
+Helper function that samples the detector positions in accordance of "fuzzy" detectors.
+"δr" is the 1σ position error.
+"""
+function gendetectorpos(detectors::Vector{RectBox{T}}, δr::Real; n::Int=10, seed::Union{Nothing,Int}=nothing) where {T<:Real}
+    generated_detectors = []
+    if seed !== nothing
+        Random.seed!(seed)
+    end
+    for i in 1:n
+        dets = deepcopy(detectors)
+        for d in dets
+            d.position += rand(Normal(0, δr), 3)
+        end
+        push!(generated_detectors, dets)
+    end
+    return generated_detectors
+end

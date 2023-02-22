@@ -427,6 +427,8 @@ function isthrough!(r::Ray, cyl::Cylinder, crosses::SortedDict{Float64,SVector{3
 end
 
 
+# --- Scratch ---
+
 """
 Calculate the analytic rate (assuming unit I₀) of a set of detectors by using MC Integration (hemisphere).
 This function will determine if the detector vector has the chip in it (detector name being "Chip").
@@ -512,6 +514,3 @@ function analytic_R(detectors::Vector{T};
     hit_prob = integrate(hit_integrand, config=int_config, print=-1, neval=neval, niter=15)
     return hit_prob
 end
-
-
-# --- Scratch ---

@@ -10,6 +10,8 @@ using JLD2
 using StatsBase
 using MCIntegration
 using Interpolations
+using LogDensityProblems, LogDensityProblemsAD, TransformVariables, TransformedLogDensities, DynamicHMC
+
 
 CACHE_DIR = joinpath(dirname(@__FILE__), "cache")
 mkpath(CACHE_DIR)
@@ -18,7 +20,7 @@ mkpath(CACHE_DIR)
 A mutable ray object (just a line) that could go through multiple LabObjects.
 (θ, φ) denotes the unit direction vector, so (0, π) goes up.
 Note: This is only a demo for the use of @kwdef macro.
-    """
+"""
 @kwdef mutable struct Ray{T<:Real}
     azimuth::T # the angle θ in spherical coordinates in radian
     polar::T # angle φ in spherical coordinates in radian
@@ -35,7 +37,7 @@ end
 
 
 """
-Returns a random number with pdf: Normalized(cos²(x)) ∈ [x_min, x_max). We use inverse sampling for speed.
+Returns a random number with pdf: Normalized(cos²(x)sin(x)) ∈ [x_min, x_max). We use inverse sampling for speed.
 !!!Note: sampling on a sphere requires taking into account of the Jacobian sin(θ)dθdφ = dΩ,
 The constraint is within any solid angle dΩ, the random point counts are constant: so ∫f(θ,φ)dΩ = 1 => pdf = f(θ,φ)sin(θ).
 """
@@ -160,7 +162,7 @@ end
 """
 Sample from the Continuous variable from MCIntegration.
 """
-function randContinuous(x::MCIntegration.Continuous{G}; n=1, inv_itp=nothing) where {G<:AbstractVector}
+function randContinuous(x::MCIntegration.Continuous{G}; n::Int=1, inv_itp=nothing) where {G<:AbstractVector}
     if inv_itp === nothing
         xs = range(0, stop=1; length=length(x.grid))
         inv_itp = Interpolations.scale(interpolate(x.grid, BSpline(Linear())), xs)
@@ -217,61 +219,113 @@ end
 
 
 """
-Muon flux pdf.
-See https://www.worldscientific.com/doi/abs/10.1142/S0217751X18501750.
+Define the Muon flux pdf problem, in the form of a struct.
 """
-function μpdf(E::Real; θ=0, E₀=4.29, ϵ=854, n=3.0, Rd_ratio=174)
+@kwdef struct μPDF
     # Parameter units: E₀ [GeV], ϵ [GeV]
-    D = √(Rd_ratio^2 * cos(θ)^2 + 2Rd_ratio + 1) - Rd_ratio * cos(θ)
-    return (E₀ + E)^(-n) * (1 + E / ϵ)^(-1) * D
+    E₀::Float64 = 4.29
+    ϵ::Float64 = 854.0
+    n::Float64 = 3.0
+    Rd_ratio::Float64 = 174.0
+end
+
+"""
+Define the loglikelihood of μPDF, given E and θ.
+See https://www.worldscientific.com/doi/abs/10.1142/S0217751X18501750.
+Note the final pdf needs to be multiplied by the Jacobian sin(θ).
+"""
+function (p::μPDF)(params::Union{NamedTuple,AbstractVector})
+    if params isa AbstractVector
+        E, θ = params
+    elseif params isa NamedTuple
+        E = params[:E]
+        θ = params[:θ]
+    end
+    D = √(p.Rd_ratio^2 * cos(θ)^2 + 2p.Rd_ratio + 1) - p.Rd_ratio * cos(θ)
+    flux_pdf = (p.E₀ + E)^(-p.n) * (1 + E / p.ϵ)^(-1) * D^(-p.n + 1)
+    return log(flux_pdf * sin(θ))
 end
 
 
-"""
-A sampler for an arbitrary univariate distribution.
-It takes in a function with possible lower and upper bounds and performs inverse sampling.
-If provided, it also saves the results into the cache vector.
-If the total number of provided cache exceeds (by default) 1e5 the function will draw from the saved cache.
-"""
-function unisampler!(f::Function; low_bound=-Inf, upp_bound=Inf, cache=nothing, cache_size=Int(1e5))
-    if cache !== nothing && length(cache) > cache_size
-        return rand(cache)
+struct μPDFSettings
+    # E and θ range
+    # Parameter units: E [GeV], θ [rad]
+    E_range::Tuple{Float64,Float64}
+    θ_range::Tuple{Float64,Float64}
+    trans::Any
+    rng::AbstractRNG
+end
+
+function μPDFSettings(; E_range=(1.0, 100.0), θ_range=(0.0, π / 2), seed::Union{Int,Nothing}=nothing)
+    t = as((E=as(Real, E_range[1], E_range[2]), θ=as(Real, θ_range[1], θ_range[2])))
+    if seed === nothing
+        rng = Random.GLOBAL_RNG
+    else
+        rng = Random.MersenneTwister(seed)
     end
-    (total, err) = quadgk(f, low_bound, upp_bound)
-    x = rand()
-    eqn = y -> unicdf(f, y, low_bound=low_bound, upp_bound=upp_bound, total=total) - x
-    res = find_zero(eqn, (low_bound, upp_bound), A42())
-    if cache !== nothing
-        push!(cache, res)
-    end
+    return μPDFSettings(E_range, θ_range, t, rng)
+end
+
+"""
+This function provides a batch sampler of μPDF by using HMC.
+The "μPDFSettings" input is a struct containing the HMCSettings.
+The output will be a 2 by N matrix.
+"""
+function drawsamples(p::μPDF, s::μPDFSettings; N::Int=1000)
+    trans = s.trans
+    trans_logℓ = TransformedLogDensity(trans, p)
+    ∇ℓ = ADgradient(:ForwardDiff, trans_logℓ)
+    results = mcmc_with_warmup(s.rng, ∇ℓ, N; reporter=NoProgressReport())
+    res = TransformVariables.transform.(trans, eachcol(results.posterior_matrix))
+    res = hcat([getindex.(res, i) for i in 1:length(res[1])]...)'
     return res
 end
 
+# """
+# A sampler for an arbitrary univariate distribution.
+# It takes in a function with possible lower and upper bounds and performs inverse sampling.
+# If provided, it also saves the results into the cache vector.
+# If the total number of provided cache exceeds (by default) 1e5 the function will draw from the saved cache.
+# """
+# function unisampler!(f::Function; low_bound=-Inf, upp_bound=Inf, cache=nothing, cache_size=Int(1e5))
+#     if cache !== nothing && length(cache) > cache_size
+#         return rand(cache)
+#     end
+#     (total, err) = quadgk(f, low_bound, upp_bound)
+#     x = rand()
+#     eqn = y -> unicdf(f, y, low_bound=low_bound, upp_bound=upp_bound, total=total) - x
+#     res = find_zero(eqn, (low_bound, upp_bound), A42())
+#     if cache !== nothing
+#         push!(cache, res)
+#     end
+#     return res
+# end
 
-"""
-A sampler for an arbitrary univariate distribution using its cdf.
-NOTE: THIS METHOD IS NOT STABLE. 
-"""
-function unisamplercdf!(ecdf; low_bound=-Inf, upp_bound=Inf, cache=nothing, cache_size=Int(1e5))
-    if cache !== nothing && length(cache) > cache_size
-        return rand(cache)
-    end
-    x = rand()
-    eqn = y -> ecdf(y) - x
-    res = find_zero(eqn, (low_bound, upp_bound), Bisection())
-    if cache !== nothing
-        push!(cache, res)
-    end
-    return res
-end
+
+# """
+# A sampler for an arbitrary univariate distribution using its cdf.
+# NOTE: THIS METHOD IS NOT STABLE. 
+# """
+# function unisamplercdf!(ecdf; low_bound=-Inf, upp_bound=Inf, cache=nothing, cache_size=Int(1e5))
+#     if cache !== nothing && length(cache) > cache_size
+#         return rand(cache)
+#     end
+#     x = rand()
+#     eqn = y -> ecdf(y) - x
+#     res = find_zero(eqn, (low_bound, upp_bound), Bisection())
+#     if cache !== nothing
+#         push!(cache, res)
+#     end
+#     return res
+# end
 
 
-"""
-Return the cdf of a univariate distribution. Note this is not normalized.
-"""
-function unicdf(f::Function, x::Real; low_bound=-Inf, upp_bound=Inf, total=1.0)
-    @assert low_bound <= x <= upp_bound "$x exceeding function support [$low_bound, $upp_bound]."
-    (res, err) = quadgk(f, low_bound, x)
-    res /= total
-    return res
-end
+# """
+# Return the cdf of a univariate distribution. Note this is not normalized.
+# """
+# function unicdf(f::Function, x::Real; low_bound=-Inf, upp_bound=Inf, total=1.0)
+#     @assert low_bound <= x <= upp_bound "$x exceeding function support [$low_bound, $upp_bound]."
+#     (res, err) = quadgk(f, low_bound, x)
+#     res /= total
+#     return res
+# end
