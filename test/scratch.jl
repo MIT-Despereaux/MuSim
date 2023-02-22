@@ -70,11 +70,11 @@ heatmap!(x_range, y_range, pdf_MvNormal * 2,
 
 
 # %%
-using MuSim, BenchmarkTools
+using MuSim, HCubature, Plots
 
 p = μPDF()
 s = μPDFSettings()
-drawsamples(p, s, N=10000)
+res = drawsamples(p, s, N=10000)
 
 # %%
 # Plot the theoretical and histogram
@@ -83,33 +83,44 @@ E_range = LinRange(s.E_range..., 101)
 
 # %%
 # Plot the histogram in log
-p1 = histogram2d(res[1, :], res[2, :], label="Posterior", bins=(E_range, θ_range), normed=true, color=:plasma, alpha=0.1)
+p1 = histogram2d(res[1, :], res[2, :], label="Posterior", bins=(E_range, θ_range), normed=true, color=:plasma, alpha=0.2)
 
-pdf_theo = exp.(p.([(E=e, θ=t) for t in θ_range, e in E_range])) / 0.01398009970294201
+normalization = hcubature(x -> exp(p(x)), (s.E_range[1], s.θ_range[1]), (s.E_range[2], s.θ_range[2]))[1]
+pdf_theo = exp.(p.([(E=e, θ=t) for t in θ_range, e in E_range])) / normalization
 # Create the heatmap plot
-contour!(E_range, θ_range, pdf_theo,
-    xlabel="x",
-    ylabel="y",
+p1 = contour!(E_range, θ_range, pdf_theo,
+    xlabel="E",
+    ylabel="θ",
     levels=100,
     color=:plasma,
     title="2D Distribution")
+display(p1)
 
 # %%
 # Plot the traces
 # plot(res[1, :], label="E", yscale=:log10)
-function E_pdf(p, E)
-    return (p.E₀ + E)^(-p.n) * (1 + E / p.ϵ)^(-1) * 50
+f = x -> @. (p.E₀ + x)^(-p.n) * (1 + x / p.ϵ)^(-1)
+normalization = hcubature(f, (s.E_range[1],), (s.E_range[2],))[1][1]
+
+# %%
+function E_pdf(p, E, n)
+    return (p.E₀ + E)^(-p.n) * (1 + E / p.ϵ)^(-1) / n
 end
 
-function θ_pdf(p, θ)
+histogram(res[1, :], label="E", normalize=:pdf)
+plot!(E_range, [E_pdf(p, e, normalization) for e in E_range], label="E theoretical")
+
+# %%
+f = x -> @. (√(p.Rd_ratio^2 * cos(x)^2 + 2p.Rd_ratio + 1) - p.Rd_ratio * cos(x))^(-p.n + 1) * sin(x)
+normalization = hcubature(f, (s.θ_range[1],), (s.θ_range[2],))[1][1]
+
+function θ_pdf(p, θ, n)
     D = √(p.Rd_ratio^2 * cos(θ)^2 + 2p.Rd_ratio + 1) - p.Rd_ratio * cos(θ)
-    return D^(-p.n + 1)
+    return D^(-p.n + 1) * sin(θ) / n
 end
 
-# histogram(res[1, :], label="E", yscale=:log10, legend=false, normalize=:pdf)
-# plot!(E_range, [E_pdf(p, e) for e in E_range], label="E theoretical", yscale=:log10, legend=false)
-histogram(res[2, :], label="θ", yscale=:log10, legend=false, normalize=:pdf)
-plot!(θ_range, [θ_pdf(p, t) for t in θ_range], label="θ theoretical", yscale=:log10, legend=false)
+histogram(res[2, :], label="θ", normalize=:pdf)
+plot!(θ_range, [θ_pdf(p, t, normalization) for t in θ_range], label="θ theoretical")
 
 # %%
 itp = linear_interpolation(edges, (eCDF(edges)), extrapolation_bc=Flat())
