@@ -223,15 +223,15 @@ Define the Muon flux pdf problem, in the form of a struct.
 """
 @kwdef struct μPDF
     # Parameter units: E₀ [GeV], ϵ [GeV]
-    E₀::Float64 = 4.29
-    ϵ::Float64 = 854.0
-    n::Float64 = 3.0
-    Rd_ratio::Float64 = 174.0
+    ρ::Vector{Float64} = [0.102573, -0.068287, 0.958633, 0.0407253, 0.817285]
+    ϵ::Vector{Float64} = [115, 850]
+    E₀::Float64 = 3.64
+    γ::Float64 = 2.7
 end
 
 """
 Define the loglikelihood of μPDF, given E and θ.
-See https://www.worldscientific.com/doi/abs/10.1142/S0217751X18501750.
+See https://arxiv.org/pdf/1509.06176.pdf.
 Note the final pdf needs to be multiplied by the Jacobian sin(θ).
 """
 function (p::μPDF)(params::Union{NamedTuple,AbstractVector})
@@ -241,9 +241,10 @@ function (p::μPDF)(params::Union{NamedTuple,AbstractVector})
         E = params[:E]
         θ = params[:θ]
     end
-    D = √(p.Rd_ratio^2 * cos(θ)^2 + 2p.Rd_ratio + 1) - p.Rd_ratio * cos(θ)
-    flux_pdf = (p.E₀ + E)^(-p.n) * (1 + E / p.ϵ)^(-1) * D^(-p.n + 1)
-    return log(flux_pdf * sin(θ))
+    z = @. √((cos(θ)^2 + (p.ρ[1])^2 + p.ρ[2] * cos(θ)^(p.ρ[3]) + p.ρ[4] * cos(θ)^(p.ρ[5])) / (1 + (p.ρ[1]^2) + p.ρ[2] + p.ρ[4]))
+    q = @. (1 + p.E₀ / (E * z^1.29))
+    flux_pdf = @. (E * q)^(-p.γ) * (1 / (1 + 1.1 * E * z / p.ϵ[1]) + 0.054 / (1 + 1.1 * E * z / p.ϵ[2]))
+    return @. log(flux_pdf * sin(θ))
 end
 
 

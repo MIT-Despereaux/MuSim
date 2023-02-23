@@ -99,28 +99,25 @@ display(p1)
 # %%
 # Plot the traces
 # plot(res[1, :], label="E", yscale=:log10)
-f = x -> @. (p.E₀ + x)^(-p.n) * (1 + x / p.ϵ)^(-1)
-normalization = hcubature(f, (s.E_range[1],), (s.E_range[2],))[1][1]
+normalization = hcubature(x -> exp(p(x)), (s.E_range[1], s.θ_range[1]), (s.E_range[2], s.θ_range[2]))
 
 # %%
-function E_pdf(p, E, n)
-    return (p.E₀ + E)^(-p.n) * (1 + E / p.ϵ)^(-1) / n
+function E_pdf(p, E)
+    f = y -> hcubature(x -> exp.(p((E=y, θ=x))), (s.θ_range[1],), (s.θ_range[2],))[1][1]
+    return f(E) / normalization[1]
 end
 
 histogram(res[1, :], label="E", normalize=:pdf)
-plot!(E_range, [E_pdf(p, e, normalization) for e in E_range], label="E theoretical")
+plot!(E_range, [E_pdf(p, e) for e in E_range], label="E theoretical")
 
 # %%
-f = x -> @. (√(p.Rd_ratio^2 * cos(x)^2 + 2p.Rd_ratio + 1) - p.Rd_ratio * cos(x))^(-p.n + 1) * sin(x)
-normalization = hcubature(f, (s.θ_range[1],), (s.θ_range[2],))[1][1]
-
-function θ_pdf(p, θ, n)
-    D = √(p.Rd_ratio^2 * cos(θ)^2 + 2p.Rd_ratio + 1) - p.Rd_ratio * cos(θ)
-    return D^(-p.n + 1) * sin(θ) / n
+function θ_pdf(p, θ)
+    f = y -> hcubature(x -> exp.(p((E=x, θ=y))), (s.E_range[1],), (s.E_range[2],))[1][1]
+    return f(θ) / normalization[1]
 end
 
 histogram(res[2, :], label="θ", normalize=:pdf)
-plot!(θ_range, [θ_pdf(p, t, normalization) for t in θ_range], label="θ theoretical")
+plot!(θ_range, [θ_pdf(p, t) for t in θ_range], label="θ theoretical")
 
 # %%
 itp = linear_interpolation(edges, (eCDF(edges)), extrapolation_bc=Flat())
