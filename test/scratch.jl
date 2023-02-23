@@ -103,7 +103,7 @@ normalization = hcubature(x -> exp(p(x)), (s.E_range[1], s.θ_range[1]), (s.E_ra
 
 # %%
 function E_pdf(p, E)
-    f = y -> hcubature(x -> exp.(p((E=y, θ=x))), (s.θ_range[1],), (s.θ_range[2],))[1][1]
+    f = y -> hquadrature(x -> exp.(p((E=y, θ=x))), s.θ_range[1], s.θ_range[2])[1]
     return f(E) / normalization[1]
 end
 
@@ -112,7 +112,7 @@ plot!(E_range, [E_pdf(p, e) for e in E_range], label="E theoretical")
 
 # %%
 function θ_pdf(p, θ)
-    f = y -> hcubature(x -> exp.(p((E=x, θ=y))), (s.E_range[1],), (s.E_range[2],))[1][1]
+    f = y -> hquadrature(x -> exp.(p((E=x, θ=y))), s.E_range[1], s.E_range[2])[1]
     return f(θ) / normalization[1]
 end
 

@@ -6,6 +6,8 @@ module CoverageTest
 include("testutils.jl")
 
 using Test
+# using Plots
+# using Infiltrator
 
 # The following code is necessary to fix VSCode julia local module linting
 if isdefined(@__MODULE__, :LanguageServer)
@@ -15,9 +17,8 @@ else
     using MuSim
 end
 
-# using Plots
 using MCIntegration
-using Infiltrator
+
 
 # %%
 """

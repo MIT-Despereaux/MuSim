@@ -4,7 +4,6 @@ import Base.@kwdef
 using LinearAlgebra
 using Random
 using StaticArrays
-using QuadGK
 using Roots
 using JLD2
 using StatsBase
@@ -13,8 +12,8 @@ using Interpolations
 using LogDensityProblems, LogDensityProblemsAD, TransformVariables, TransformedLogDensities, DynamicHMC
 
 
-CACHE_DIR = joinpath(dirname(@__FILE__), "cache")
-mkpath(CACHE_DIR)
+# CACHE_DIR = joinpath(dirname(@__FILE__), "cache")
+# mkpath(CACHE_DIR)
 
 """
 A mutable ray object (just a line) that could go through multiple LabObjects.
@@ -229,6 +228,7 @@ Define the Muon flux pdf problem, in the form of a struct.
     γ::Float64 = 2.7
 end
 
+
 """
 Define the loglikelihood of μPDF, given E and θ.
 See https://arxiv.org/pdf/1509.06176.pdf.
@@ -257,6 +257,10 @@ struct μPDFSettings
     rng::AbstractRNG
 end
 
+
+"""
+Constructor for the μPDFSettings. Use this for initializing the μPDFSettings.
+"""
 function μPDFSettings(; E_range=(1.0, 100.0), θ_range=(0.0, π / 2), seed::Union{Int,Nothing}=nothing)
     t = as((E=as(Real, E_range[1], E_range[2]), θ=as(Real, θ_range[1], θ_range[2])))
     if seed === nothing
@@ -266,6 +270,7 @@ function μPDFSettings(; E_range=(1.0, 100.0), θ_range=(0.0, π / 2), seed::Uni
     end
     return μPDFSettings(E_range, θ_range, t, rng)
 end
+
 
 """
 This function provides a batch sampler of μPDF by using HMC.
@@ -281,6 +286,7 @@ function drawsamples(p::μPDF, s::μPDFSettings; N::Int=1000)
     res = hcat([getindex.(res, i) for i in 1:length(res[1])]...)'
     return res
 end
+
 
 # """
 # A sampler for an arbitrary univariate distribution.
