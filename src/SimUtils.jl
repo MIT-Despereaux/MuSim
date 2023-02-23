@@ -101,7 +101,8 @@ end
 
 """
 Runs the simulation with a hemispherical generating surface.
-The output contains the following sparse matrices: T/F table; traversed distances;
+The output contains the following sparse matrices: traversed distances; Muon energies;
+Note the T/F table can be inferred from the sparse matrices.
 This is the "vanilla" version without any optimizations.
 """
 function runhemisimlite(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
@@ -123,6 +124,7 @@ function runhemisimlite(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
                 i_vec = zeros(length(detectors))
                 j_vec = zeros(length(detectors))
                 dist = zeros(length(detectors))
+                energy = zeros(length(detectors))
             end
             # Set the hit_vec to false to prepare for a new ray
             hit_vec .*= false
@@ -138,6 +140,7 @@ function runhemisimlite(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
                     hit_vec[j] = true
                     d = norm(last(crosses)[2] - first(crosses)[2])
                     dist[j] = d
+                    energy[j] = samples[1, i]
                     empty!(crosses)
                 end
             end
@@ -145,18 +148,21 @@ function runhemisimlite(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
             ii = i_vec[hit_vec]
             jj = j_vec[hit_vec]
             dd = dist[hit_vec]
+            ee = energy[hit_vec]
             # Reduce the accumulators
             @reduce() do (i_list = Float64[]; ii),
             (j_list = Float64[]; jj),
-            (dist_list = Float64[]; dd)
+            (dist_list = Float64[]; dd),
+            (energy_list = Float64[]; ee)
                 append!!(i_list, ii)
                 append!!(j_list, jj)
                 append!!(dist_list, dd)
+                append!!(energy_list, ee)
             end
         end
-        TFtable = sparse(i_list, j_list, trues(length(i_list)), N, length(detectors))
         dist_table = sparse(i_list, j_list, dist_list, N, length(detectors))
-        return (TFtable, dist_table, copy(samples[1, :]))
+        energy_table = sparse(i_list, j_list, energy_list, N, length(detectors))
+        return (dist_table, energy_table)
     end
 end
 
@@ -228,24 +234,20 @@ end
 """
 Helper function that takes in the result table corresponding
 to a member of sim_config and the detector "combinations",
-and outputs the inclusive and exclusive geometric factor (β). 
+and outputs the inclusive and exclusive geometry factor (β). 
 Output: the β factors are in # of hits, and the multiplication factor is provided at the end.
 The combination should be a list of string, and can be of any order.
 Requires a dict containing the "detect_order": det name -> column#.
 """
-function calculateβ(config, det_order, res, comb; optimize::Bool=false)
+function calculateβ(config, det_order, res_vec, comb)
     inclusive_β = 0
     exclusive_β = 0
     sort!(comb)
     total_n = 0
-    for res_tup in res
-        res_spmat = res_tup[1]
+    for res_tup in res_vec
+        # Construct the T/F table from the first sparse matrix
+        res_spmat = (res_tup[1] .!= 0)
         total_n += size(res_spmat, 1)
-        if optimize
-            angles = reshape(res_tup[end], 2, :)
-            dist_θ = res_tup[end-2]
-            dist_φ = res_tup[end-1]
-        end
         init_idx = det_order[comb[1]]
         inc_comb_res = res_spmat[:, init_idx]
         exc_comb_res = res_spmat[:, init_idx]
@@ -261,25 +263,8 @@ function calculateβ(config, det_order, res, comb; optimize::Bool=false)
                 exc_comb_res = exc_comb_res .> bit_array
             end
         end
-        if optimize
-            for i in eachindex(inc_comb_res)
-                if inc_comb_res[i]
-                    local θ = angles[1, i]
-                    local φ = angles[2, i]
-                    inclusive_β += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
-                end
-            end
-            for i in eachindex(exc_comb_res)
-                if exc_comb_res[i]
-                    local θ = angles[1, i]
-                    local φ = angles[2, i]
-                    exclusive_β += 3 / (2π) * cos(θ)^2 * sin(θ) / (pdf(dist_θ, θ) * pdf(dist_φ, φ))
-                end
-            end
-        else
-            inclusive_β += sum(inc_comb_res)
-            exclusive_β += sum(exc_comb_res)
-        end
+        inclusive_β += sum(inc_comb_res)
+        exclusive_β += sum(exc_comb_res)
     end
     println("Combination: $(comb)")
 
@@ -317,7 +302,7 @@ end
 This function processes the input result table and outputs the geometric
 factors as a dict. It also saves the dict as a csv file.
 """
-function βio(output_dir, res, config; savefile=false, overwrite=false)
+function βio(output_dir, res_vec, config; savefile=false, overwrite=false)
     config_hash = hash(config)
     println("βio config hash: $(config_hash)")
     # Check the output table
@@ -339,7 +324,7 @@ function βio(output_dir, res, config; savefile=false, overwrite=false)
         for c in combs
             sort!(c)
             # join(β, delim) for concatenation
-            (inc_β, inc_β_err, exc_β, exc_β_err, inc_n_hits, exc_n_hits) = calculateβ(config, det_order, res, c)
+            (inc_β, inc_β_err, exc_β, exc_β_err, inc_n_hits, exc_n_hits) = calculateβ(config, det_order, res_vec, c)
             println("Inclusive beta: $(inc_β) ± $(inc_β_err)")
             println("Exclusive beta: $(exc_β) ± $(exc_β_err)")
             println("Inclusive relative err (%): $(100.0 / sqrt(inc_n_hits))")
