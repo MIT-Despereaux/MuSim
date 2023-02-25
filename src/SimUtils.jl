@@ -108,13 +108,14 @@ This is the "vanilla" version without any optimizations.
 function runhemisimlite(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
     exec=ThreadedEx(),
     center::Union{NTuple{3,Real},SVector{3}}=(0, 0, 0),
-    s::μPDFSettings=μPDFSettings()
+    s::μPDFSettings=μPDFSettings(),
+    cos2::Bool=false
 ) where {T<:LabObject{<:Real}}
     # Generate the HMC Eμ and θ samples
     p = μPDF()
     samples = drawsamples(p, s, N=N)
     # See https://juliafolds.github.io/FLoops.jl/dev/howto/avoid-box/#avoid-box for the "let" phrase.
-    let center = center
+    let center = center, cos2 = cos2
         @floop exec for i = 1:N
             # Private mutable variables
             @init begin
@@ -129,7 +130,11 @@ function runhemisimlite(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
             # Set the hit_vec to false to prepare for a new ray
             hit_vec .*= false
             # Generate a random ray
-            θ̃ = samples[2, i]
+            if cos2
+                θ̃ = nothing
+            else
+                θ̃ = samples[2, i]
+            end
             modifyray!(ray, R, center, ℓ; θ=θ̃)
             # Loop through each dectector to fill the pre-allocated vectors
             for (j, d) in enumerate(detectors)
@@ -208,6 +213,7 @@ function runexp(output_dir, sim_configs;
         else
             results_tmp = []
         end
+        cos2 = config["cos2"]
 
         total_batch = Int(ceil(config["sim_num"] / batch_size))
         for b in 1:total_batch
@@ -217,7 +223,7 @@ function runexp(output_dir, sim_configs;
             batch_sim_num = min(config["sim_num"] - (b - 1) * batch_size, batch_size)
             println("\n--- Simulation events $batch_sim_num, batch#$b, config#$i, ℓ=$ℓ, R=$R started ---")
             if lite
-                push!(results_tmp, runhemisimlite(batch_sim_num, detectors, R, ℓ; center=center))
+                push!(results_tmp, runhemisimlite(batch_sim_num, detectors, R, ℓ; center=center, cos2=cos2))
             else
                 push!(results_tmp, runhemisim(batch_sim_num, detectors, R, ℓ; center=center, config=mc_config))
             end
