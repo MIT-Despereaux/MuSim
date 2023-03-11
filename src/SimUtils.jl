@@ -1,13 +1,5 @@
 ### This part contains functions used for simulations
 
-using FLoops, BangBang, MicroCollections
-using SparseArrays
-using DataStructures
-using Distributions
-using Combinatorics
-using Random
-using JLD2, CSV
-using DataFrames
 
 """
 Runs the simulation with a hemispherical generating surface. 
@@ -357,7 +349,7 @@ function βio(output_dir, res_vec, config; savefile=false, overwrite=false)
         geo_factors = DataFrame(geo_factors_dict)
         println(geo_factors)
         if savefile
-            sort!(geo_factors, :combination)
+            sort!(geo_factors, "combination")
             CSV.write(f_name, geo_factors)
         end
     end
@@ -476,6 +468,7 @@ end
 
 # --- Scratch ---
 
+
 # """
 # Compose the simulation assuming the first "detector" is the chip.
 # This function aims to output the "correct" geometric factor.
@@ -529,45 +522,45 @@ end
 # end
 
 
-"""
-Returns the relative direction and error going from center of T1 to center of T2, in spherical coordinates.
-!!! NEEDS FIX: FROM EDGE OF T1 to EDGE OF T2
-"""
-function _relativedir(T1::RectBox{T}, T2::RectBox{T}) where {T<:Real}
-    center_1 = T1.position
-    center_2 = T2.position
-    dir = center_2 - center_1
-    (θ, φ) = _cart2unitsph(dir...)
-    θ_max = θ
-    θ_min = θ
-    φ_max = φ
-    φ_min = φ
-    for x_sign_2 in (-1, 1)
-        for y_sign_2 in (-1, 1)
-            for z_sign_2 in (-1, 1)
-                for x_sign_1 in (-1, 1)
-                    for y_sign_1 in (-1, 1)
-                        for z_sign_1 in (-1, 1)
-                            v2 = (x_sign_2 * T2.delta_x / 2, y_sign_2 * T2.delta_y / 2, z_sign_2 * T2.delta_z / 2) |> SVector{3,Float64}
-                            v2 = _rotate(v2, T2.orientation..., 0)
-                            v1 = (x_sign_1 * T1.delta_x / 2, y_sign_1 * T1.delta_y / 2, z_sign_1 * T1.delta_z / 2) |> SVector{3,Float64}
-                            v1 = _rotate(v1, T1.orientation..., 0)
-                            dir2 = center_2 + v2 - (center_1 + v1)
-                            (θ2, φ2) = _cart2unitsph(dir2...)
-                            θ_max = max(θ_max, θ2)
-                            θ_min = min(θ_min, θ2)
-                            φ_max = max(φ_max, φ2)
-                            φ_min = min(φ_min, φ2)
-                        end
-                    end
-                end
-            end
-        end
-    end
-    Δθ = θ_max - θ_min
-    Δφ = φ_max - φ_min
-    return (θ, φ, Δθ, Δφ)
-end
+# """
+# Returns the relative direction and error going from center of T1 to center of T2, in spherical coordinates.
+# !!! NEEDS FIX: FROM EDGE OF T1 to EDGE OF T2
+# """
+# function _relativedir(T1::RectBox{T}, T2::RectBox{T}) where {T<:Real}
+#     center_1 = T1.position
+#     center_2 = T2.position
+#     dir = center_2 - center_1
+#     (θ, φ) = _cart2unitsph(dir...)
+#     θ_max = θ
+#     θ_min = θ
+#     φ_max = φ
+#     φ_min = φ
+#     for x_sign_2 in (-1, 1)
+#         for y_sign_2 in (-1, 1)
+#             for z_sign_2 in (-1, 1)
+#                 for x_sign_1 in (-1, 1)
+#                     for y_sign_1 in (-1, 1)
+#                         for z_sign_1 in (-1, 1)
+#                             v2 = (x_sign_2 * T2.delta_x / 2, y_sign_2 * T2.delta_y / 2, z_sign_2 * T2.delta_z / 2) |> SVector{3,Float64}
+#                             v2 = _rotate(v2, T2.orientation..., 0)
+#                             v1 = (x_sign_1 * T1.delta_x / 2, y_sign_1 * T1.delta_y / 2, z_sign_1 * T1.delta_z / 2) |> SVector{3,Float64}
+#                             v1 = _rotate(v1, T1.orientation..., 0)
+#                             dir2 = center_2 + v2 - (center_1 + v1)
+#                             (θ2, φ2) = _cart2unitsph(dir2...)
+#                             θ_max = max(θ_max, θ2)
+#                             θ_min = min(θ_min, θ2)
+#                             φ_max = max(φ_max, φ2)
+#                             φ_min = min(φ_min, φ2)
+#                         end
+#                     end
+#                 end
+#             end
+#         end
+#     end
+#     Δθ = θ_max - θ_min
+#     Δφ = φ_max - φ_min
+#     return (θ, φ, Δθ, Δφ)
+# end
 
 
 # """
@@ -580,21 +573,22 @@ end
 #     return ℓ, r
 # end
 
-"""
-Helper function that samples the detector positions in accordance of "fuzzy" detectors.
-"δr" is the 1σ position error.
-"""
-function gendetectorpos(detectors::Vector{RectBox{T}}, δr::Real; n::Int=10, seed::Union{Nothing,Int}=nothing) where {T<:Real}
-    generated_detectors = []
-    if seed !== nothing
-        Random.seed!(seed)
-    end
-    for i in 1:n
-        dets = deepcopy(detectors)
-        for d in dets
-            d.position += rand(Normal(0, δr), 3)
-        end
-        push!(generated_detectors, dets)
-    end
-    return generated_detectors
-end
+
+# """
+# Helper function that samples the detector positions in accordance of "fuzzy" detectors.
+# "δr" is the 1σ position error.
+# """
+# function gendetectorpos(detectors::Vector{RectBox{T}}, δr::Real; n::Int=10, seed::Union{Nothing,Int}=nothing) where {T<:Real}
+#     generated_detectors = []
+#     if seed !== nothing
+#         Random.seed!(seed)
+#     end
+#     for i in 1:n
+#         dets = deepcopy(detectors)
+#         for d in dets
+#             d.position += rand(Normal(0, δr), 3)
+#         end
+#         push!(generated_detectors, dets)
+#     end
+#     return generated_detectors
+# end

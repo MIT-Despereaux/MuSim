@@ -1,6 +1,7 @@
 # MuSim
 This folder contains a package for quick muon-detector simulations. 
 
+
 # Installation for development
 Add the current package to Julia general environment for dev, it will be recorded in the general Manifest file:
 ```julia
@@ -12,12 +13,10 @@ using Pkg; Pkg.rm("PackageName")
 ```
 
 # Python Binding
-Currently this section is under re-assessment for switching to `PythonCall`.
+**Currently this section is under re-assessment for choosing between `PythonCall` and `PyCall`. Note that at the current state calling julia function from python should be avoided.**
 
-Note: the required packages include `PyCall` which deals with python bindings.
-Its default python executable and environment can be set when installed. 
-I just bind it to my conda production environment which has `jupyter` installed.
-To bind a specific python environment, run the following commands in julia:
+Using `PyCall`: 
+- Its default python executable and environment can be set when installed. I just bind it to my conda production environment which has `jupyter` installed. To bind a specific python environment, run the following commands in julia root environment:
 ```julia
 using Pkg;
 Pkg.activate()
@@ -52,36 +51,20 @@ end
 ```
 
 You would then have the `PyCall` package installed under your root environment.
-All subsequent python wrapper package would use the same python binding as 
-the `PyCall` package.
+All subsequent python wrapper package would use the same python binding as the `PyCall` package.
 
 Reference: https://github.com/JuliaPy/PyCall.jl
 
-# Python Interface
-Since most analyses will be run in python, calling this package from python is documented below.
-A quick way is to modify and run the `simulations.jl` file in the `./tut` directory and take the saved `.pkl` files.
-Calling julia directly from python is (non-trivially) straightforward (:sweat_smile:):
+Using `PythonCall`:
+- This is much simpler: just install the package under the julia root environment.
+- After that, follow this section from the official document to choose the python executable you want: https://cjdoris.github.io/PythonCall.jl/stable/pythoncall/#pythoncall-config.
 
-Steps:
-1. Install [PyJulia](https://github.com/JuliaPy/pyjulia) from `pip`:
-```sh
-# !Activate the correct environment first
-conda activate prod;
-pip install julia;
-python -c "import julia; julia.install()";
-```
-2. Run the python scripts using `python-jl` executable instead of the regular `python` executable. For example:
-```sh
-python-jl ./tut/sims.py
-```
+**Please note that saving data in python-compatible formats current is not in the scope of this project. Please use `PythonCall` or `PyCall` in your own environment.**
 
-The file `sims.py` in the `./tut/` directory shows how to setup and run a simulation and get the results back in python.
-For long julia code blocks, it is recommended to write it in a separate `.jl` script and call the script directly using
-the "include" command in julia.
 
 # Usage
 To run a simulation, simply add the `MuSim` package to your Julia root environment (see above) and use it as a normal package.
-Tutorial files are in the `./tut` directory, but the following gives a very quick example.
+Examplary tests are in the `./test` directory, but the following gives a very quick example.
 ```julia
 using MuSim
 sim_num = Int(1e3)
@@ -91,9 +74,3 @@ det1 = RectBox("Name", 0.01, 0.05, 0.05, position=(0, 0, 0), orientation=deg2rad
 detectors = [det1]
 @time runhemisim(sim_num, detectors, r, (0, 0, 0), ℓ)
 ```
-
-# TODOs:
-- [ ] Error propagation.
-- [ ] [Medium Priority] Construct a multi-dimensional sampler for arbitrary distributions
-    - Motivation: how to efficiently sample an arbitrary multivariate distribution given it's analytical form?
-    - We also needs to sample its integrated probability density, for example: sample the energy spectrum of a muon after we know its solid angle.

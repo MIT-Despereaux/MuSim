@@ -1,13 +1,5 @@
 ### This part stores functions related to ray tracing
 
-import Base: +, -, ==, hash, show
-using Random
-using LinearAlgebra
-using Printf
-using StaticArrays
-using DataStructures
-using HCubature
-using MCIntegration
 
 # Abstract lab object that can be used in coincidence
 # It is NOT possible to subtype a concrete type
@@ -122,6 +114,7 @@ function (-)(x::CombinedObj{T}, y::LabObject{T}) where {T}
     return CombinedObj{T}(x.dets, x.ops)
 end
 
+
 """
 For comparison, we need to implement Base.hash and Base.:==
 This is also used when hashing a dictionary that contains the object.
@@ -233,6 +226,7 @@ function _rotate(v::SVector{3,Float64}, θ₁::Real, φ::Real, θ₂::Real)
     return new_v
 end
 
+
 """
 Solid angle factor for a single side of a box.
 """
@@ -241,6 +235,7 @@ function _fΩ(θ)
     res, _ = hcubature(dΩ, (0, 0), (π / 2, 2π), rtol=1e-6)
     return res
 end
+
 
 """
 Calculates the analytic rate (assuming unit I₀) of a box, given the parameters.
@@ -428,6 +423,7 @@ end
 
 
 # --- Scratch ---
+
 
 """
 Calculate the analytic rate (assuming unit I₀) of a set of detectors by using MC Integration (hemisphere).

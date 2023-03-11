@@ -1,19 +1,5 @@
 ### This part stores properties of the generated particles and their interactions.
 
-import Base.@kwdef
-using LinearAlgebra
-using Random
-using StaticArrays
-using Roots
-using JLD2
-using StatsBase
-using MCIntegration
-using Interpolations
-using LogDensityProblems, LogDensityProblemsAD, TransformVariables, TransformedLogDensities, DynamicHMC
-
-
-# CACHE_DIR = joinpath(dirname(@__FILE__), "cache")
-# mkpath(CACHE_DIR)
 
 """
 A mutable ray object (just a line) that could go through multiple LabObjects.
@@ -53,7 +39,7 @@ end
 """
 Returns the distribution f(θ) = cos³(θ)sin(θ). The extra cos factor is required for sampling on a horizontal plane with rays coming
 non-vertically (for the angle between the flux vector and norm vector of the surface).
-    """
+"""
 function _randcos3(x_min::Real=π / 2, x_max::Real=π)
     @assert π / 2 <= x_min <= x_max <= π
     # For x_min smaller than π/2 cos(x)^4 will not be monotonic which causes trouble
@@ -193,30 +179,6 @@ function probContinuous(x::MCIntegration.Continuous{G}, x0::Union{Real,AbstractA
 end
 
 
-# --- Scratch ---
-
-
-# μ_dist_cache_fname = "mu_spawn_dist"
-# μ_dist_cache_file = joinpath(CACHE_DIR, μ_dist_cache_fname * ".jld2")
-# μ_dist_cache = Float64[]
-# if !isfile(μ_dist_cache_file)
-#     println("Generating cache...")
-#     # save(μ_dist_cache_file, μ_dist_cache_fname, μ_dist_cache)
-# else
-#     println("Loading cache...")
-#     μ_dist_cache = load(μ_dist_cache_file, μ_dist_cache_fname)
-# end
-# """
-# Generates the muon energy given its ray angle.
-# Note currently the energy distribution is completely independent of the angle distribution.
-# """
-# function μenergy!(θ::Real)
-#     sample = unisampler!(x -> μpdf(x, θ=π - θ), low_bound=1.0, upp_bound=100, cache=μ_dist_cache)
-#     save(μ_dist_cache_file, μ_dist_cache_fname, μ_dist_cache)
-#     return sample
-# end
-
-
 """
 Define the Muon flux pdf problem, in the form of a struct.
 """
@@ -286,6 +248,9 @@ function drawsamples(p::μPDF, s::μPDFSettings; N::Int=1000)
     res = hcat([getindex.(res, i) for i in 1:length(res[1])]...)'
     return res
 end
+
+
+# --- Scratch ---
 
 
 # """
