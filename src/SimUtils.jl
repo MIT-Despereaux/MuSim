@@ -2,81 +2,76 @@
 
 
 """
-Runs the simulation with a hemispherical generating surface. 
-The user can provide an optimized configuration for sampling.
+Runs the simulation with a hemispherical generating surface.
+The output contains the following sparse matrices: traversed distances; Muon energies; cross points; ray directions;
+This is the "vanilla" version without any optimizations.
 """
-function runhemisim(n_sim::Int, detectors::Vector{T}, R::Real, ℓ::Real;
+function runhemisim(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
     exec=ThreadedEx(),
     center::Union{NTuple{3,Real},SVector{3}}=(0, 0, 0),
-    config::Union{MCIntegration.Configuration,Nothing}=nothing
+    s::μPDFSettings=μPDFSettings(),
+    cos2::Bool=false
 ) where {T<:LabObject{<:Real}}
-    # Interpolation
-    if config !== nothing
-        θ_dist = config.var[1]
-        φ_dist = config.var[2]
-        xs = range(0, stop=1; length=length(θ_dist.grid))
-        inv_itp_θ = Interpolations.scale(interpolate(θ_dist.grid, BSpline(Linear())), xs)
-        inv_itp_φ = Interpolations.scale(interpolate(φ_dist.grid, BSpline(Linear())), xs)
-    else
-        θ_dist = nothing
-        φ_dist = nothing
-        inv_itp_θ = nothing
-        inv_itp_φ = nothing
-    end
-    let config = config, θ_dist = θ_dist, φ_dist = φ_dist, inv_itp_θ = inv_itp_θ, inv_itp_φ = inv_itp_φ
-        @floop exec for i = 1:n_sim
+    # Generate the HMC Eμ and θ samples
+    p = μPDF()
+    samples = drawsamples(p, s, N=N)
+    # See https://juliafolds.github.io/FLoops.jl/dev/howto/avoid-box/#avoid-box for the "let" phrase.
+    let center = center, cos2 = cos2
+        @floop exec for i = 1:N
             # Private mutable variables
             @init begin
                 ray = Ray(0.0, 0.0)
                 crosses = SortedDict{Float64,SVector{3,Float64}}()
                 hit_vec = falses(length(detectors))
-                i_vec = zeros(Int64, length(detectors))
-                j_vec = zeros(Int64, length(detectors))
+                i_vec = zeros(length(detectors))
+                j_vec = zeros(length(detectors))
+                dist = zeros(length(detectors))
+                energy = zeros(length(detectors))
                 crx = Vector{Union{Missing,Dict}}(missing, length(detectors))
                 dir = Vector{Union{Missing,Dict}}(missing, length(detectors))
             end
             # Set the hit_vec to false to prepare for a new ray
             hit_vec .*= false
-            # Generate ray parameters if configuration is provided
-            if config !== nothing
-                θ̃ = randContinuous(θ_dist; inv_itp=inv_itp_θ)
-                φ̃ = randContinuous(φ_dist; inv_itp=inv_itp_φ)
-                # ww = cos(θ̃)^2 * sin(θ̃) / (probContinuous(θ_dist, θ̃) * probContinuous(φ_dist, φ̃))
-                ww = 1.0
-                modifyray!(ray, R, center, ℓ; θ=θ̃, φ=φ̃)
+            # Generate a random ray
+            if cos2
+                θ̃ = nothing
             else
-                ww = 1.0
-                modifyray!(ray, R, center, ℓ)
+                θ̃ = samples[2, i]
             end
+            modifyray!(ray, R, center, ℓ; θ=θ̃)
             # Loop through each dectector to fill the pre-allocated vectors
             for (j, d) in enumerate(detectors)
                 hit = isthrough!(ray, d, crosses)
                 if hit
                     i_vec[j] = i
                     j_vec[j] = j
-                    hit_vec[j] = hit
+                    hit_vec[j] = true
                     points = hcat(values(crosses)...)'
                     # Note the points are vertically concatenated
                     crx[j] = Dict(i => points)
                     dir[j] = Dict(i => Float64[ray.azimuth, ray.polar])
+                    d = norm(last(crosses)[2] - first(crosses)[2])
+                    dist[j] = d
+                    energy[j] = samples[1, i]
                     empty!(crosses)
                 end
             end
             # Hit indices to be filled
             ii = i_vec[hit_vec]
             jj = j_vec[hit_vec]
+            dd = dist[hit_vec]
+            ee = energy[hit_vec]
             # Reduce the accumulators
-            # Note that for threaded executions, the initial values will be
-            # assigned to the variables (e.g. ii) at the end of the loop
-            # This means e.g. ii will be Int[] at some time
-            @reduce() do (i_list = Int64[]; ii),
-            (j_list = Int64[]; jj),
-            (weight = Float64[]; ww),
+            @reduce() do (i_list = Float64[]; ii),
+            (j_list = Float64[]; jj),
+            (dist_list = Float64[]; dd),
+            (energy_list = Float64[]; ee),
             (crx_pts = [Dict{Int,Matrix{Float64}}() for i = 1:length(detectors)]; crx),
             (ray_dirs = [Dict{Int,Vector{Float64}}() for i = 1:length(detectors)]; dir)
-                append!(i_list, ii)
-                append!(j_list, jj)
-                append!(weight, ww)
+                append!!(i_list, ii)
+                append!!(j_list, jj)
+                append!!(dist_list, dd)
+                append!!(energy_list, ee)
                 for (j, c) in enumerate(crx)
                     if !ismissing(c) && !isempty(c)
                         merge!(crx_pts[j], crx[j])
@@ -85,8 +80,9 @@ function runhemisim(n_sim::Int, detectors::Vector{T}, R::Real, ℓ::Real;
                 end
             end
         end
-        results = sparse(i_list, j_list, trues(length(i_list)), n_sim, length(detectors))
-        return (results, crx_pts, ray_dirs, weight)
+        dist_table = sparse(i_list, j_list, dist_list, N, length(detectors))
+        energy_table = sparse(i_list, j_list, energy_list, N, length(detectors))
+        return (dist_table, energy_table, crx_pts, ray_dirs)
     end
 end
 
@@ -217,7 +213,7 @@ function runexp(output_dir, sim_configs;
             if lite
                 push!(results_tmp, runhemisimlite(batch_sim_num, detectors, R, ℓ; center=center, cos2=cos2))
             else
-                push!(results_tmp, runhemisim(batch_sim_num, detectors, R, ℓ; center=center, config=mc_config))
+                push!(results_tmp, runhemisim(batch_sim_num, detectors, R, ℓ; center=center, cos2=cos2))
             end
             @save f_name config detectors results_tmp
         end
