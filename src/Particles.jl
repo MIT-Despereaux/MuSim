@@ -4,10 +4,9 @@
 """
 A mutable ray object (just a line) that could go through multiple LabObjects.
 (θ, φ) denotes the unit direction vector, so (0, π) goes up.
-Note: This is only a demo for the use of @kwdef macro.
 """
 @kwdef mutable struct Ray{T<:Real}
-    azimuth::T # the angle θ in spherical coordinates in radian
+    zenith::T # the angle θ in spherical coordinates in radian
     polar::T # angle φ in spherical coordinates in radian
     start_position::MVector{3,Float64} = @MVector [0, 0, 0]
 end
@@ -17,7 +16,7 @@ Convenience constructor.
 """
 function Ray(θ::T, φ::U; start_pos::NTuple{3,<:Real}=(0, 0, 0)) where {T,U}
     args = promote(θ, φ)
-    return Ray(azimuth=args[1], polar=args[2], start_position=MVector{3,Float64}(start_pos))
+    return Ray(zenith=args[1], polar=args[2], start_position=MVector{3,Float64}(start_pos))
 end
 
 
@@ -73,7 +72,7 @@ function modifyray!(r::Ray{<:Real}, max_bounds::NTuple{2,Real}, center::Union{NT
     if φ === nothing
         φ = rand() * 2π
     end
-    r.azimuth = θ
+    r.zenith = θ
     r.polar = φ
     (r.start_position.x, r.start_position.y, r.start_position.z) = (x, y, center[3])
     return nothing
@@ -113,7 +112,7 @@ function modifyray!(r::Ray{<:Real}, R::Real, center::Union{NTuple{3,Real},SVecto
     φ_hat = SA_F64[-sin(start_φ), cos(start_φ), 0]
     dx_vec = pos[1] * θ_hat + pos[2] * φ_hat
     x_vec += (dx_vec + (center |> SVector))
-    r.azimuth = θ
+    r.zenith = θ
     r.polar = φ
     (r.start_position.x, r.start_position.y, r.start_position.z) = (x_vec.x, x_vec.y, x_vec.z)
     return nothing
@@ -124,7 +123,7 @@ end
 Returns the direction vector in Cartesian coordinates.
 """
 function raydir(r::Ray{<:Real})::SVector{3,Float64}
-    return _unitsph2cart(r.azimuth, r.polar)
+    return _unitsph2cart(r.zenith, r.polar)
 end
 
 
@@ -196,7 +195,7 @@ Define the loglikelihood of μPDF, given E and θ.
 See https://arxiv.org/pdf/1509.06176.pdf.
 Note the final pdf needs to be multiplied by the Jacobian sin(θ).
 """
-function (p::μPDF)(params::Union{NamedTuple,AbstractVector})
+function (p::μPDF)(params::Union{NamedTuple,AbstractVector}; return_log=true, return_jac=true)
     if params isa AbstractVector
         E, θ = params
     elseif params isa NamedTuple
@@ -206,7 +205,15 @@ function (p::μPDF)(params::Union{NamedTuple,AbstractVector})
     z = @. √((cos(θ)^2 + (p.ρ[1])^2 + p.ρ[2] * cos(θ)^(p.ρ[3]) + p.ρ[4] * cos(θ)^(p.ρ[5])) / (1 + (p.ρ[1]^2) + p.ρ[2] + p.ρ[4]))
     q = @. (1 + p.E₀ / (E * z^1.29))
     flux_pdf = @. (E * q)^(-p.γ) * (1 / (1 + 1.1 * E * z / p.ϵ[1]) + 0.054 / (1 + 1.1 * E * z / p.ϵ[2]))
-    return @. log(flux_pdf * sin(θ))
+    if return_log
+        return @. log(flux_pdf * sin(θ))
+    else
+        if return_jac
+            return @. flux_pdf * sin(θ)
+        else
+            return flux_pdf
+        end
+    end
 end
 
 
@@ -223,7 +230,7 @@ end
 """
 Constructor for the μPDFSettings. Use this for initializing the μPDFSettings.
 """
-function μPDFSettings(; E_range=(1.0, 100.0), θ_range=(0.0, π / 2), seed::Union{Int,Nothing}=nothing)
+function μPDFSettings(; E_range=(1.0, 1000.0), θ_range=(0.0, π / 2), seed::Union{Int,Nothing}=nothing)
     t = as((E=as(Real, E_range[1], E_range[2]), θ=as(Real, θ_range[1], θ_range[2])))
     if seed === nothing
         rng = Random.GLOBAL_RNG

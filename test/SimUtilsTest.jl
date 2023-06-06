@@ -139,6 +139,7 @@ function test_comparison2(output_dir; n_sim::Int=Int(1e6))
     config["center"] = (0.338, 0.229, 1.4148)
     config["ℓ"] = 3.0
     config["R"] = 100.0
+    config["cos2"] = false
     res, sim_configs = runexp(output_dir, [config])
     βs1 = βio(output_dir, res[1], sim_configs[1]; savefile=true, overwrite=false)
     return
@@ -180,8 +181,8 @@ function main()
     println(OUT_DIR)
     mkpath(OUT_DIR)
 
-    test_comparison1(OUT_DIR)
-    # test_comparison2(OUT_DIR, n_sim=Int(1e6))
+    # test_comparison1(OUT_DIR)
+    test_comparison2(OUT_DIR, n_sim=Int(1e6))
     # test_detpos()
 end
 

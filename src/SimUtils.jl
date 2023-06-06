@@ -1,4 +1,13 @@
 ### This part contains functions used for simulations
+using HCubature.QuadGK
+
+@kwdef struct SimOutput{T<:Real}
+    dist::SparseMatrixCSC{T,Int}
+    energy::SparseMatrixCSC{T,Int}
+    crx::Any = nothing
+    dir::Any = nothing
+    μPDFSettings::Any = nothing
+end
 
 
 """
@@ -49,7 +58,7 @@ function runhemisim(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
                     points = hcat(values(crosses)...)'
                     # Note the points are vertically concatenated
                     crx[j] = Dict(i => points)
-                    dir[j] = Dict(i => Float64[ray.azimuth, ray.polar])
+                    dir[j] = Dict(i => Float64[ray.zenith, ray.polar])
                     d = norm(last(crosses)[2] - first(crosses)[2])
                     dist[j] = d
                     energy[j] = samples[1, i]
@@ -73,7 +82,7 @@ function runhemisim(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
                 append!!(dist_list, dd)
                 append!!(energy_list, ee)
                 for (j, c) in enumerate(crx)
-                    if !ismissing(c) && !isempty(c)
+                    if !ismissing(c)
                         merge!(crx_pts[j], crx[j])
                         merge!(ray_dirs[j], dir[j])
                     end
@@ -82,7 +91,8 @@ function runhemisim(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
         end
         dist_table = sparse(i_list, j_list, dist_list, N, length(detectors))
         energy_table = sparse(i_list, j_list, energy_list, N, length(detectors))
-        return (dist_table, energy_table, crx_pts, ray_dirs)
+        res = SimOutput(dist_table, energy_table, crx_pts, ray_dirs, s)
+        return res
     end
 end
 
@@ -155,7 +165,8 @@ function runhemisimlite(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
         end
         dist_table = sparse(i_list, j_list, dist_list, N, length(detectors))
         energy_table = sparse(i_list, j_list, energy_list, N, length(detectors))
-        return (dist_table, energy_table)
+        res = SimOutput(dist_table, energy_table, nothing, nothing, s)
+        return res
     end
 end
 
@@ -238,9 +249,9 @@ function calculateβ(config, det_order, res_vec, comb)
     exclusive_β = 0
     sort!(comb)
     total_n = 0
-    for res_tup in res_vec
+    for sim_out in res_vec
         # Construct the T/F table from the first sparse matrix
-        res_spmat = (res_tup[1] .!= 0)
+        res_spmat = (sim_out.dist .!= 0)
         total_n += size(res_spmat, 1)
         init_idx = det_order[comb[1]]
         inc_comb_res = res_spmat[:, init_idx]
@@ -315,10 +326,22 @@ function βio(output_dir, res_vec, config; savefile=false, overwrite=false)
         det_order = Dict{String,Int}(d.name => i for (i, d) in enumerate(detectors))
         # List all combinations
         combs = combinations(collect(keys(det_order)))
+        settings = res_vec[1].μPDFSettings
+        p = μPDF()
+        f = x -> (p)(x; return_log=false)
+        f_vert = x -> (p)([x, 0]; return_log=false, return_jac=false)
+        totalI = hcubature(f, (settings.E_range[1], settings.θ_range[1]), (settings.E_range[2], settings.θ_range[2]))[1]
+        vertI = quadgk(f_vert, settings.E_range[1], settings.E_range[2])[1]
+        factor = totalI / vertI * 3
+        println("Factor: $(factor)")
         for c in combs
             sort!(c)
             # join(β, delim) for concatenation
             (inc_β, inc_β_err, exc_β, exc_β_err, inc_n_hits, exc_n_hits) = calculateβ(config, det_order, res_vec, c)
+            inc_β *= factor
+            inc_β_err *= factor
+            exc_β *= factor
+            exc_β_err *= factor
             println("Inclusive beta: $(inc_β) ± $(inc_β_err)")
             println("Exclusive beta: $(exc_β) ± $(exc_β_err)")
             println("Inclusive relative err (%): $(100.0 / sqrt(inc_n_hits))")
