@@ -364,7 +364,13 @@ function βio(output_dir, res_vec, config; savefile=false, overwrite=false)
             push!(gf_n_hits, inc_n_hits)
             push!(gf_n_hits, exc_n_hits)
         end
-        geo_factors_dict = OrderedDict("combination" => gf_name, "beta" => gf_β, "beta_err" => gf_β_err, "n_hits" => gf_n_hits, "n_total" => repeat([config["sim_num"]], length(gf_name)), "analytic" => gf_analytic)
+        geo_factors_dict = OrderedDict("combination" => gf_name,
+            "beta" => gf_β,
+            "beta_err" => gf_β_err,
+            "n_hits" => gf_n_hits,
+            "n_total" => repeat([config["sim_num"]], length(gf_name)),
+            "factor" => repeat([factor], length(gf_name)),
+            "analytic" => gf_analytic)
         geo_factors = DataFrame(geo_factors_dict)
         println(geo_factors)
         if savefile
