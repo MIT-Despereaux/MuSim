@@ -285,7 +285,7 @@ function βio(output_dir, res_vec, config; savefile=false, overwrite=false)
         f = x -> (p)(x; return_log=false)
         f_vert = x -> (p)([x, 0]; return_log=false, return_jac=false)
         totalI = hcubature(f, (settings.E_range[1], settings.θ_range[1]), (settings.E_range[2], settings.θ_range[2]))[1]
-        vertI = hcubature(f_vert, settings.E_range[1], settings.E_range[2])[1]
+        vertI = hquadrature(f_vert, settings.E_range[1], settings.E_range[2])[1]
         factor = totalI / vertI * 3
         println("Factor: $(factor)")
         for c in combs
