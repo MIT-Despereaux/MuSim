@@ -1,5 +1,5 @@
 ### This part contains functions used for simulations
-using HCubature.QuadGK
+
 
 @kwdef struct SimOutput{T<:Real}
     col_names::Vector{String}
@@ -30,7 +30,7 @@ function runhemisim(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
             @init begin
                 ray = Ray(0.0, 0.0)
                 crosses = SortedDict{Float64,SVector{3,Float64}}()
-                hits = Vector{Vector{Float64}}(undef, length(detectors))
+                hits = Vector{Vector{Float32}}(undef, length(detectors))
                 hits_selection = falses(length(detectors))
             end
             hits_selection .*= false
@@ -46,7 +46,7 @@ function runhemisim(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
                 through = isthrough!(ray, d, crosses)
                 if through
                     hits_selection[j] = true
-                    single_hit = Float64[]
+                    single_hit = Float32[]
                     push!(single_hit, i)
                     push!(single_hit, j)
                     d = norm(last(crosses)[2] - first(crosses)[2])
@@ -76,7 +76,8 @@ function runhemisim(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
             "y1",
             "z1",
             "zenith",
-            "polar"]
+            "polar"
+            ]
         res = SimOutput(col_names, vcat(total_hits'...), N, s)
         return res
     end
@@ -105,14 +106,10 @@ function runhemisimlite(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
             @init begin
                 ray = Ray(0.0, 0.0)
                 crosses = SortedDict{Float64,SVector{3,Float64}}()
-                hit_vec = falses(length(detectors))
-                i_vec = zeros(length(detectors))
-                j_vec = zeros(length(detectors))
-                dist = zeros(length(detectors))
-                energy = zeros(length(detectors))
+                hits = Vector{Vector{Float32}}(undef, length(detectors))
+                hits_selection = falses(length(detectors))
             end
-            # Set the hit_vec to false to prepare for a new ray
-            hit_vec .*= false
+            hits_selection .*= false
             # Generate a random ray
             if cos2
                 θ̃ = nothing
@@ -122,37 +119,32 @@ function runhemisimlite(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
             modifyray!(ray, R, center, ℓ; θ=θ̃)
             # Loop through each dectector to fill the pre-allocated vectors
             for (j, d) in enumerate(detectors)
-                hit = isthrough!(ray, d, crosses)
-                if hit
-                    i_vec[j] = i
-                    j_vec[j] = j
-                    hit_vec[j] = true
+                through = isthrough!(ray, d, crosses)
+                if through
+                    hits_selection[j] = true
+                    single_hit = Float32[]
+                    push!(single_hit, i)
+                    push!(single_hit, j)
                     d = norm(last(crosses)[2] - first(crosses)[2])
-                    dist[j] = d
-                    energy[j] = samples[1, i]
+                    push!(single_hit, d)
+                    push!(single_hit, samples[1, i])
                     empty!(crosses)
+                    hits[j] = single_hit
                 end
             end
-            # Hit indices to be filled
-            ii = i_vec[hit_vec]
-            jj = j_vec[hit_vec]
-            dd = dist[hit_vec]
-            ee = energy[hit_vec]
             # Reduce the accumulators
-            @reduce() do (i_list = Float64[]; ii),
-            (j_list = Float64[]; jj),
-            (dist_list = Float64[]; dd),
-            (energy_list = Float64[]; ee)
-                append!!(i_list, ii)
-                append!!(j_list, jj)
-                append!!(dist_list, dd)
-                append!!(energy_list, ee)
+            selected_hits = @view hits[hits_selection]
+            @reduce() do (total_hits = []; selected_hits)
+                append!!(total_hits, selected_hits)
             end
         end
-        dist_table = sparse(i_list, j_list, dist_list, N, length(detectors))
-        # energy_table = sparse(i_list, j_list, energy_list, N, length(detectors))
-        # res = SimOutput(dist_table, energy_table, nothing, nothing, s)
-        return dist_table
+        col_names = ["row",
+            "col",
+            "dist",
+            "energy"
+            ]
+        res = SimOutput(col_names, vcat(total_hits'...), N, s)
+        return res
     end
 end
 
@@ -293,7 +285,7 @@ function βio(output_dir, res_vec, config; savefile=false, overwrite=false)
         f = x -> (p)(x; return_log=false)
         f_vert = x -> (p)([x, 0]; return_log=false, return_jac=false)
         totalI = hcubature(f, (settings.E_range[1], settings.θ_range[1]), (settings.E_range[2], settings.θ_range[2]))[1]
-        vertI = quadgk(f_vert, settings.E_range[1], settings.E_range[2])[1]
+        vertI = hcubature(f_vert, settings.E_range[1], settings.E_range[2])[1]
         factor = totalI / vertI * 3
         println("Factor: $(factor)")
         for c in combs
