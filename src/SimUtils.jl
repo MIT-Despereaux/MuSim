@@ -61,7 +61,7 @@ function runhemisim(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
             end
             # Reduce the accumulators
             selected_hits = @view hits[hits_selection]
-            @reduce() do (total_hits = EmptyVector{Float64}(); selected_hits)
+            @reduce() do (total_hits = []; selected_hits)
                 append!!(total_hits, selected_hits)
             end
         end
@@ -186,9 +186,9 @@ function runexp(output_dir, config;
     else
         println("--- Simulation events $sim_num, ℓ=$ℓ, R=$R started ---")
         if lite
-            result = runhemisimlite(batch_sim_num, detectors, R, ℓ; center=center, cos2=cos2)
+            result = runhemisimlite(sim_num, detectors, R, ℓ; center=center, cos2=cos2)
         else
-            result = runhemisim(batch_sim_num, detectors, R, ℓ; center=center, cos2=cos2)
+            result = runhemisim(sim_num, detectors, R, ℓ; center=center, cos2=cos2)
         end
         @save f_name result
     end
