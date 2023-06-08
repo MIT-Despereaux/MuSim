@@ -2,10 +2,8 @@
 using HCubature.QuadGK
 
 @kwdef struct SimOutput{T<:Real}
-    dist::SparseMatrixCSC{T,Int}
-    energy::SparseMatrixCSC{T,Int}
-    crx::Any = nothing
-    dir::Any = nothing
+    mat::Matrix{T}
+    sim_num::Int
     μPDFSettings::Any = nothing
 end
 
@@ -31,16 +29,18 @@ function runhemisim(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
             @init begin
                 ray = Ray(0.0, 0.0)
                 crosses = SortedDict{Float64,SVector{3,Float64}}()
-                hit_vec = falses(length(detectors))
-                i_vec = zeros(length(detectors))
-                j_vec = zeros(length(detectors))
-                dist = zeros(length(detectors))
-                energy = zeros(length(detectors))
-                crx = Vector{Union{Missing,Dict}}(missing, length(detectors))
-                dir = Vector{Union{Missing,Dict}}(missing, length(detectors))
+                hits = Vector{Vector{Float64}}(undef, length(detectors))
+                hits_selection = falses(length(detectors))
+                # hit_vec = falses(length(detectors))
+                # i_vec = zeros(length(detectors))
+                # j_vec = zeros(length(detectors))
+                # dist = zeros(Float16, length(detectors))
+                # energy = zeros(Float16, length(detectors))
+                # crx = Vector{Union{Missing,Vector{Float16}}}(missing, length(detectors))
+                # dir = Vector{Union{Missing,Vector{Float16}}}(missing, length(detectors))
             end
-            # Set the hit_vec to false to prepare for a new ray
-            hit_vec .*= false
+            hits_selection .*= false
+            # dist .*= 0
             # Generate a random ray
             if cos2
                 θ̃ = nothing
@@ -50,48 +50,36 @@ function runhemisim(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
             modifyray!(ray, R, center, ℓ; θ=θ̃)
             # Loop through each dectector to fill the pre-allocated vectors
             for (j, d) in enumerate(detectors)
-                hit = isthrough!(ray, d, crosses)
-                if hit
-                    i_vec[j] = i
-                    j_vec[j] = j
-                    hit_vec[j] = true
-                    points = hcat(values(crosses)...)'
-                    # Note the points are vertically concatenated
-                    crx[j] = Dict(i => points)
-                    dir[j] = Dict(i => Float64[ray.zenith, ray.polar])
+                through = isthrough!(ray, d, crosses)
+                if through
+                    hits_selection[j] = true
+                    single_hit = Float64[]
+                    push!(single_hit, i)
+                    push!(single_hit, j)
                     d = norm(last(crosses)[2] - first(crosses)[2])
-                    dist[j] = d
-                    energy[j] = samples[1, i]
+                    push!(single_hit, d)
+                    push!(single_hit, samples[1, i])
+                    append!(single_hit, first(crosses)[2])
+                    append!(single_hit, last(crosses)[2])
+                    push!(single_hit, ray.zenith, ray.polar)
                     empty!(crosses)
+                    hits[j] = single_hit
                 end
             end
             # Hit indices to be filled
-            ii = i_vec[hit_vec]
-            jj = j_vec[hit_vec]
-            dd = dist[hit_vec]
-            ee = energy[hit_vec]
+            # ii = i_vec[hit_vec]
+            # jj = j_vec[hit_vec]
+            # dd = dist[hit_vec]
+            # ee = energy[hit_vec]
             # Reduce the accumulators
-            @reduce() do (i_list = Float64[]; ii),
-            (j_list = Float64[]; jj),
-            (dist_list = Float64[]; dd),
-            (energy_list = Float64[]; ee),
-            (crx_pts = [Dict{Int,Matrix{Float64}}() for i = 1:length(detectors)]; crx),
-            (ray_dirs = [Dict{Int,Vector{Float64}}() for i = 1:length(detectors)]; dir)
-                append!!(i_list, ii)
-                append!!(j_list, jj)
-                append!!(dist_list, dd)
-                append!!(energy_list, ee)
-                for (j, c) in enumerate(crx)
-                    if !ismissing(c)
-                        merge!(crx_pts[j], crx[j])
-                        merge!(ray_dirs[j], dir[j])
-                    end
-                end
+            selected_hits = @view hits[hits_selection]
+            @reduce() do (total_hits = []; selected_hits)
+                append!!(total_hits, selected_hits)
             end
         end
-        dist_table = sparse(i_list, j_list, dist_list, N, length(detectors))
-        energy_table = sparse(i_list, j_list, energy_list, N, length(detectors))
-        res = SimOutput(dist_table, energy_table, crx_pts, ray_dirs, s)
+        # dist_table = sparse(i_list, j_list, dist_list, N, length(detectors))
+        # energy_table = sparse(i_list, j_list, energy_list, N, length(detectors))
+        res = SimOutput(vcat(total_hits'...), N, s)
         return res
     end
 end
@@ -165,8 +153,8 @@ function runhemisimlite(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
         end
         dist_table = sparse(i_list, j_list, dist_list, N, length(detectors))
         energy_table = sparse(i_list, j_list, energy_list, N, length(detectors))
-        res = SimOutput(dist_table, energy_table, nothing, nothing, s)
-        return res
+        # res = SimOutput(dist_table, energy_table, nothing, nothing, s)
+        return dist_table
     end
 end
 
@@ -208,7 +196,7 @@ function runexp(output_dir, sim_configs;
         f_name = joinpath(output_dir, "sim_cache_H$(config_hash).jld2")
         if !overwrite && isfile(f_name)
             println("Cache found, loading...")
-            @load f_name config detectors results_tmp
+            @load f_name results_tmp
         else
             results_tmp = []
         end
@@ -220,13 +208,13 @@ function runexp(output_dir, sim_configs;
                 continue
             end
             batch_sim_num = min(config["sim_num"] - (b - 1) * batch_size, batch_size)
-            println("\n--- Simulation events $batch_sim_num, batch#$b, config#$i, ℓ=$ℓ, R=$R started ---")
+            println("--- Simulation events $batch_sim_num, batch#$b, config#$i, ℓ=$ℓ, R=$R started ---")
             if lite
                 push!(results_tmp, runhemisimlite(batch_sim_num, detectors, R, ℓ; center=center, cos2=cos2))
             else
                 push!(results_tmp, runhemisim(batch_sim_num, detectors, R, ℓ; center=center, cos2=cos2))
             end
-            @save f_name config detectors results_tmp
+            @save f_name results_tmp
         end
         results[i] = results_tmp
         sim_configs[i] = config
@@ -250,9 +238,12 @@ function calculateβ(config, det_order, res_vec, comb)
     sort!(comb)
     total_n = 0
     for sim_out in res_vec
-        # Construct the T/F table from the first sparse matrix
-        res_spmat = (sim_out.dist .!= 0)
-        total_n += size(res_spmat, 1)
+        # Construct the T/F table
+        I = sim_out.mat[:, 1]
+        J = sim_out.mat[:, 2]
+        res_spmat = sparse(I, J, trues(length(I)), sim_out.sim_num, length(det_order))
+        # res_spmat = (sim_out.dist .!= 0)
+        total_n += sim_out.sim_num
         init_idx = det_order[comb[1]]
         inc_comb_res = res_spmat[:, init_idx]
         exc_comb_res = res_spmat[:, init_idx]
