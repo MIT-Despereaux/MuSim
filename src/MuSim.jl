@@ -6,6 +6,7 @@ This small module is for simulating muon interactions with the detectors.
 
 import Base: +, -, ==, hash, show, @kwdef
 using Printf
+using Infiltrator
 using LinearAlgebra
 using Random
 using StaticArrays
