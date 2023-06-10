@@ -1,11 +1,10 @@
 ### This part contains functions used for simulations
-using HCubature.QuadGK
+
 
 @kwdef struct SimOutput{T<:Real}
-    dist::SparseMatrixCSC{T,Int}
-    energy::SparseMatrixCSC{T,Int}
-    crx::Any = nothing
-    dir::Any = nothing
+    col_names::Vector{String}
+    mat::Matrix{T}
+    sim_num::Int
     μPDFSettings::Any = nothing
 end
 
@@ -31,16 +30,10 @@ function runhemisim(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
             @init begin
                 ray = Ray(0.0, 0.0)
                 crosses = SortedDict{Float64,SVector{3,Float64}}()
-                hit_vec = falses(length(detectors))
-                i_vec = zeros(length(detectors))
-                j_vec = zeros(length(detectors))
-                dist = zeros(length(detectors))
-                energy = zeros(length(detectors))
-                crx = Vector{Union{Missing,Dict}}(missing, length(detectors))
-                dir = Vector{Union{Missing,Dict}}(missing, length(detectors))
+                hits = Vector{Vector{Float32}}(undef, length(detectors))
+                hits_selection = falses(length(detectors))
             end
-            # Set the hit_vec to false to prepare for a new ray
-            hit_vec .*= false
+            hits_selection .*= false
             # Generate a random ray
             if cos2
                 θ̃ = nothing
@@ -50,48 +43,42 @@ function runhemisim(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
             modifyray!(ray, R, center, ℓ; θ=θ̃)
             # Loop through each dectector to fill the pre-allocated vectors
             for (j, d) in enumerate(detectors)
-                hit = isthrough!(ray, d, crosses)
-                if hit
-                    i_vec[j] = i
-                    j_vec[j] = j
-                    hit_vec[j] = true
-                    points = hcat(values(crosses)...)'
-                    # Note the points are vertically concatenated
-                    crx[j] = Dict(i => points)
-                    dir[j] = Dict(i => Float64[ray.zenith, ray.polar])
+                through = isthrough!(ray, d, crosses)
+                if through
+                    hits_selection[j] = true
+                    single_hit = Float32[]
+                    push!(single_hit, i)
+                    push!(single_hit, j)
                     d = norm(last(crosses)[2] - first(crosses)[2])
-                    dist[j] = d
-                    energy[j] = samples[1, i]
+                    push!(single_hit, d)
+                    push!(single_hit, samples[1, i])
+                    append!(single_hit, first(crosses)[2])
+                    append!(single_hit, last(crosses)[2])
+                    push!(single_hit, ray.zenith, ray.polar)
                     empty!(crosses)
+                    hits[j] = single_hit
                 end
             end
-            # Hit indices to be filled
-            ii = i_vec[hit_vec]
-            jj = j_vec[hit_vec]
-            dd = dist[hit_vec]
-            ee = energy[hit_vec]
             # Reduce the accumulators
-            @reduce() do (i_list = Float64[]; ii),
-            (j_list = Float64[]; jj),
-            (dist_list = Float64[]; dd),
-            (energy_list = Float64[]; ee),
-            (crx_pts = [Dict{Int,Matrix{Float64}}() for i = 1:length(detectors)]; crx),
-            (ray_dirs = [Dict{Int,Vector{Float64}}() for i = 1:length(detectors)]; dir)
-                append!!(i_list, ii)
-                append!!(j_list, jj)
-                append!!(dist_list, dd)
-                append!!(energy_list, ee)
-                for (j, c) in enumerate(crx)
-                    if !ismissing(c)
-                        merge!(crx_pts[j], crx[j])
-                        merge!(ray_dirs[j], dir[j])
-                    end
-                end
+            selected_hits = @view hits[hits_selection]
+            @reduce() do (total_hits = []; selected_hits)
+                append!!(total_hits, selected_hits)
             end
         end
-        dist_table = sparse(i_list, j_list, dist_list, N, length(detectors))
-        energy_table = sparse(i_list, j_list, energy_list, N, length(detectors))
-        res = SimOutput(dist_table, energy_table, crx_pts, ray_dirs, s)
+        col_names = ["row",
+            "col",
+            "dist",
+            "energy",
+            "x0",
+            "y0",
+            "z0",
+            "x1",
+            "y1",
+            "z1",
+            "zenith",
+            "polar"
+            ]
+        res = SimOutput(col_names, vcat(total_hits'...), N, s)
         return res
     end
 end
@@ -119,14 +106,10 @@ function runhemisimlite(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
             @init begin
                 ray = Ray(0.0, 0.0)
                 crosses = SortedDict{Float64,SVector{3,Float64}}()
-                hit_vec = falses(length(detectors))
-                i_vec = zeros(length(detectors))
-                j_vec = zeros(length(detectors))
-                dist = zeros(length(detectors))
-                energy = zeros(length(detectors))
+                hits = Vector{Vector{Float32}}(undef, length(detectors))
+                hits_selection = falses(length(detectors))
             end
-            # Set the hit_vec to false to prepare for a new ray
-            hit_vec .*= false
+            hits_selection .*= false
             # Generate a random ray
             if cos2
                 θ̃ = nothing
@@ -136,53 +119,42 @@ function runhemisimlite(N::Int, detectors::Vector{T}, R::Real, ℓ::Real;
             modifyray!(ray, R, center, ℓ; θ=θ̃)
             # Loop through each dectector to fill the pre-allocated vectors
             for (j, d) in enumerate(detectors)
-                hit = isthrough!(ray, d, crosses)
-                if hit
-                    i_vec[j] = i
-                    j_vec[j] = j
-                    hit_vec[j] = true
+                through = isthrough!(ray, d, crosses)
+                if through
+                    hits_selection[j] = true
+                    single_hit = Float32[]
+                    push!(single_hit, i)
+                    push!(single_hit, j)
                     d = norm(last(crosses)[2] - first(crosses)[2])
-                    dist[j] = d
-                    energy[j] = samples[1, i]
+                    push!(single_hit, d)
+                    push!(single_hit, samples[1, i])
                     empty!(crosses)
+                    hits[j] = single_hit
                 end
             end
-            # Hit indices to be filled
-            ii = i_vec[hit_vec]
-            jj = j_vec[hit_vec]
-            dd = dist[hit_vec]
-            ee = energy[hit_vec]
             # Reduce the accumulators
-            @reduce() do (i_list = Float64[]; ii),
-            (j_list = Float64[]; jj),
-            (dist_list = Float64[]; dd),
-            (energy_list = Float64[]; ee)
-                append!!(i_list, ii)
-                append!!(j_list, jj)
-                append!!(dist_list, dd)
-                append!!(energy_list, ee)
+            selected_hits = @view hits[hits_selection]
+            @reduce() do (total_hits = []; selected_hits)
+                append!!(total_hits, selected_hits)
             end
         end
-        dist_table = sparse(i_list, j_list, dist_list, N, length(detectors))
-        energy_table = sparse(i_list, j_list, energy_list, N, length(detectors))
-        res = SimOutput(dist_table, energy_table, nothing, nothing, s)
+        col_names = ["row",
+            "col",
+            "dist",
+            "energy"
+            ]
+        res = SimOutput(col_names, vcat(total_hits'...), N, s)
         return res
     end
 end
 
 
 """
-Runs the simulation in given configurations. 
-It scans over all the "sim_configs". 
-The batch_size parameter denotes the number of simulations between caching,
-defaults to 1e6.
-The cached file blocks contain relevant metadata for the simulation 
-and adopt the naming convention "sim_cache_H#.jld2":
+Runs one simulation in a given configuration. 
+The cached file adopts the naming convention "sim_cache_H#.jld2":
 H -- Hash of the config dict;
-The outputs are vectors of simulation results.
 """
-function runexp(output_dir, sim_configs;
-    batch_size=Int(1e6),
+function runexp(output_dir, config;
     lite=true,
     overwrite=false,
     mc_config::Union{MCIntegration.Configuration,Nothing}=nothing
@@ -191,48 +163,28 @@ function runexp(output_dir, sim_configs;
     # Print number of threads
     @printf("Total threads: %d\n", Threads.nthreads())
 
-    # Initilize the result vectors
-    # Each entry in the vector is a full simulation output
-    # results: size(sim_num, detectors) sparse matrix with trues and falses.
-    # crx_pts: size(detectors) vector of dictionary with [event → two cross points of this event] as [key → value] pairs.
-    # ray_dirs: size(detectors) vector of dictionary with [event → (θ, φ) of the muon direction].
-    results = Vector{Any}(undef, length(sim_configs))
-
-    for (i, config) in enumerate(sim_configs)
-        detectors = config["detectors"]
-        center = config["center"]
-        ℓ = config["ℓ"]
-        R = config["R"]
-        config_hash = hash(config)
-        println("Config hash: $(config_hash)")
-        f_name = joinpath(output_dir, "sim_cache_H$(config_hash).jld2")
-        if !overwrite && isfile(f_name)
-            println("Cache found, loading...")
-            @load f_name config detectors results_tmp
+    detectors = config["detectors"]
+    center = config["center"]
+    ℓ = config["ℓ"]
+    R = config["R"]
+    cos2 = config["cos2"]
+    config_hash = hash(config)
+    sim_num = config["sim_num"]
+    println("Config hash: $(config_hash)")
+    f_name = joinpath(output_dir, "sim_cache_H$(config_hash).jld2")
+    if !overwrite && isfile(f_name)
+        println("Cache found, loading...")
+        @load f_name result
+    else
+        println("--- Simulation events $sim_num, ℓ=$ℓ, R=$R started ---")
+        if lite
+            result = runhemisimlite(sim_num, detectors, R, ℓ; center=center, cos2=cos2)
         else
-            results_tmp = []
+            result = runhemisim(sim_num, detectors, R, ℓ; center=center, cos2=cos2)
         end
-        cos2 = config["cos2"]
-
-        total_batch = Int(ceil(config["sim_num"] / batch_size))
-        for b in 1:total_batch
-            if size(results_tmp)[1] >= b
-                continue
-            end
-            batch_sim_num = min(config["sim_num"] - (b - 1) * batch_size, batch_size)
-            println("\n--- Simulation events $batch_sim_num, batch#$b, config#$i, ℓ=$ℓ, R=$R started ---")
-            if lite
-                push!(results_tmp, runhemisimlite(batch_sim_num, detectors, R, ℓ; center=center, cos2=cos2))
-            else
-                push!(results_tmp, runhemisim(batch_sim_num, detectors, R, ℓ; center=center, cos2=cos2))
-            end
-            @save f_name config detectors results_tmp
-        end
-        results[i] = results_tmp
-        sim_configs[i] = config
+        @save f_name result
     end
-
-    return results, sim_configs
+    return result
 end
 
 
@@ -250,9 +202,11 @@ function calculateβ(config, det_order, res_vec, comb)
     sort!(comb)
     total_n = 0
     for sim_out in res_vec
-        # Construct the T/F table from the first sparse matrix
-        res_spmat = (sim_out.dist .!= 0)
-        total_n += size(res_spmat, 1)
+        # Construct the T/F table
+        I = sim_out.mat[:, 1]
+        J = sim_out.mat[:, 2]
+        res_spmat = sparse(I, J, trues(length(I)), sim_out.sim_num, length(det_order))
+        total_n += sim_out.sim_num
         init_idx = det_order[comb[1]]
         inc_comb_res = res_spmat[:, init_idx]
         exc_comb_res = res_spmat[:, init_idx]
@@ -282,25 +236,25 @@ function calculateβ(config, det_order, res_vec, comb)
 end
 
 
-"""
-The MC counterpart of calculating the β factors.
-"""
-function calculateβ_MC(config, comb)
-    println("Combination: $(comb)")
-    dets = config["detectors"]
-    included_dets = Vector{RectBox{Float64}}()
-    for d in dets
-        if d.name in comb
-            push!(included_dets, d)
-        end
-    end
-    missing_dets = setdiff(dets, included_dets)
-    inclusive_β_res = analytic_R(included_dets)
-    exclusive_β_res = analytic_R(included_dets, excluded_detectors=missing_dets, config=inclusive_β_res.config)
-    println("Inclusive beta: $(inclusive_β_res.mean) ± $(inclusive_β_res.stdev)")
-    println("Exclusive beta: $(exclusive_β_res.mean) ± $(exclusive_β_res.stdev)")
-    return inclusive_β_res.mean, inclusive_β_res.stdev, exclusive_β_res.mean, exclusive_β_res.stdev
-end
+# """
+# The MC counterpart of calculating the β factors.
+# """
+# function calculateβ_MC(config, comb)
+#     println("Combination: $(comb)")
+#     dets = config["detectors"]
+#     included_dets = Vector{RectBox{Float64}}()
+#     for d in dets
+#         if d.name in comb
+#             push!(included_dets, d)
+#         end
+#     end
+#     missing_dets = setdiff(dets, included_dets)
+#     inclusive_β_res = analytic_R(included_dets)
+#     exclusive_β_res = analytic_R(included_dets, excluded_detectors=missing_dets, config=inclusive_β_res.config)
+#     println("Inclusive beta: $(inclusive_β_res.mean) ± $(inclusive_β_res.stdev)")
+#     println("Exclusive beta: $(exclusive_β_res.mean) ± $(exclusive_β_res.stdev)")
+#     return inclusive_β_res.mean, inclusive_β_res.stdev, exclusive_β_res.mean, exclusive_β_res.stdev
+# end
 
 
 """
@@ -331,7 +285,7 @@ function βio(output_dir, res_vec, config; savefile=false, overwrite=false)
         f = x -> (p)(x; return_log=false)
         f_vert = x -> (p)([x, 0]; return_log=false, return_jac=false)
         totalI = hcubature(f, (settings.E_range[1], settings.θ_range[1]), (settings.E_range[2], settings.θ_range[2]))[1]
-        vertI = quadgk(f_vert, settings.E_range[1], settings.E_range[2])[1]
+        vertI = hquadrature(f_vert, settings.E_range[1], settings.E_range[2])[1]
         factor = totalI / vertI * 3
         println("Factor: $(factor)")
         for c in combs
@@ -382,113 +336,113 @@ function βio(output_dir, res_vec, config; savefile=false, overwrite=false)
 end
 
 
-"""
-MC Counterpart of βio.
-"""
-function βio_MC(output_dir, config; savefile=false, overwrite=false)
-    config_hash = hash(config)
-    println("βio config hash: $(config_hash)")
-    # Check the output table
-    f_name = joinpath(output_dir, "comb_table_MC_H$(config_hash).csv")
-    if !overwrite && isfile(f_name)
-        println("$(f_name) found, loading...")
-        geo_factors = CSV.File(f_name) |> Dict{String,Float64}
-    else
-        geo_factors = Dict{String,Float64}()
-        detectors = config["detectors"]
-        det_order = Dict{String,Int}(d.name => i for (i, d) in enumerate(detectors))
-        # List all combinations
-        combs = combinations(collect(keys(det_order)))
-        for c in combs
-            sort!(c)
-            # join(β, delim) for concatenation
-            (inc_β, inc_β_err, exc_β, exc_β_err) = calculateβ_MC(config, c)
-            println("Inclusive beta: $(inc_β) ± $(inc_β_err)")
-            println("Exclusive beta: $(exc_β) ± $(exc_β_err)")
-            println("Inclusive relative err (%): $(100.0 * inc_β_err/ inc_β)")
-            geo_factors["inc_beta_$(join(c, "_"))"] = inclusive_β
-            geo_factors["exc_beta_$(join(c, "_"))"] = exclusive_β
-        end
-        if savefile
-            geo_factors = sort(collect(geo_factors), by=x -> x[1])
-            CSV.write(f_name, geo_factors)
-        end
-    end
-    return geo_factors
-end
+# """
+# MC Counterpart of βio.
+# """
+# function βio_MC(output_dir, config; savefile=false, overwrite=false)
+#     config_hash = hash(config)
+#     println("βio config hash: $(config_hash)")
+#     # Check the output table
+#     f_name = joinpath(output_dir, "comb_table_MC_H$(config_hash).csv")
+#     if !overwrite && isfile(f_name)
+#         println("$(f_name) found, loading...")
+#         geo_factors = CSV.File(f_name) |> Dict{String,Float64}
+#     else
+#         geo_factors = Dict{String,Float64}()
+#         detectors = config["detectors"]
+#         det_order = Dict{String,Int}(d.name => i for (i, d) in enumerate(detectors))
+#         # List all combinations
+#         combs = combinations(collect(keys(det_order)))
+#         for c in combs
+#             sort!(c)
+#             # join(β, delim) for concatenation
+#             (inc_β, inc_β_err, exc_β, exc_β_err) = calculateβ_MC(config, c)
+#             println("Inclusive beta: $(inc_β) ± $(inc_β_err)")
+#             println("Exclusive beta: $(exc_β) ± $(exc_β_err)")
+#             println("Inclusive relative err (%): $(100.0 * inc_β_err/ inc_β)")
+#             geo_factors["inc_beta_$(join(c, "_"))"] = inclusive_β
+#             geo_factors["exc_beta_$(join(c, "_"))"] = exclusive_β
+#         end
+#         if savefile
+#             geo_factors = sort(collect(geo_factors), by=x -> x[1])
+#             CSV.write(f_name, geo_factors)
+#         end
+#     end
+#     return geo_factors
+# end
 
 
-"""
-This function saves simulation outputs to jld2 files.
-Names of the files are sim_res, sim_crx, sim_dirs, etc.
-Overwrite controls whether to overwrite existing data.
-"""
-function expio(output_dir, config; overwrite=false, res=nothing, crx=nothing, dirs=nothing)
-    config_hash = hash(config)
-    println("Config hash: $(config_hash)")
-    # Construct the metadata
-    metadata = ""
-    metadata *= "Simulation Configurations:\n"
-    detector_names = String[]
-    for (k, v) in config
-        if k == "detectors"
-            for d in v
-                metadata *= sprint(show, d)
-                metadata *= repeat("-", 50)
-                metadata *= "\n"
-                push!(detector_names, "$(d.name)")
-            end
-        else
-            metadata *= "$k -> $v \n"
-        end
-    end
-    println(metadata)
+# """
+# This function saves simulation outputs to jld2 files.
+# Names of the files are sim_res, sim_crx, sim_dirs, etc.
+# Overwrite controls whether to overwrite existing data.
+# """
+# function expio(output_dir, config; overwrite=false, res=nothing, crx=nothing, dirs=nothing)
+#     config_hash = hash(config)
+#     println("Config hash: $(config_hash)")
+#     # Construct the metadata
+#     metadata = ""
+#     metadata *= "Simulation Configurations:\n"
+#     detector_names = String[]
+#     for (k, v) in config
+#         if k == "detectors"
+#             for d in v
+#                 metadata *= sprint(show, d)
+#                 metadata *= repeat("-", 50)
+#                 metadata *= "\n"
+#                 push!(detector_names, "$(d.name)")
+#             end
+#         else
+#             metadata *= "$k -> $v \n"
+#         end
+#     end
+#     println(metadata)
 
-    sim_res = Dict{String,Any}()
-    if res !== nothing
-        println(res)
-        f_name = joinpath(output_dir, "sim_res_H$(config_hash).jld2")
-        if isfile(f_name) && !overwrite
-            println("$(f_name) found, loading...")
-            @load f_name res
-        else
-            @save f_name res
-        end
-        sim_res["sim_res"] = res
-    end
+#     sim_res = Dict{String,Any}()
+#     if res !== nothing
+#         println(res)
+#         f_name = joinpath(output_dir, "sim_res_H$(config_hash).jld2")
+#         if isfile(f_name) && !overwrite
+#             println("$(f_name) found, loading...")
+#             @load f_name res
+#         else
+#             @save f_name res
+#         end
+#         sim_res["sim_res"] = res
+#     end
 
-    if crx !== nothing
-        f_name = joinpath(output_dir, "sim_crx_H$(config_hash).jld2")
-        if isfile(f_name) && !overwrite
-            println("$(f_name) found, loading...")
-            @load f_name crx
-        else
-            @save f_name crx
-        end
-        sim_res["sim_crx"] = crx
-    end
+#     if crx !== nothing
+#         f_name = joinpath(output_dir, "sim_crx_H$(config_hash).jld2")
+#         if isfile(f_name) && !overwrite
+#             println("$(f_name) found, loading...")
+#             @load f_name crx
+#         else
+#             @save f_name crx
+#         end
+#         sim_res["sim_crx"] = crx
+#     end
 
-    if dirs !== nothing
-        f_name = joinpath(output_dir, "sim_dirs_H$(config_hash).jld2")
-        if isfile(f_name) && !overwrite
-            println("$(f_name) found, loading...")
-            @load f_name dirs
-        else
-            @save f_name dirs
-        end
-        sim_res["sim_dirs"] = dirs
-    end
+#     if dirs !== nothing
+#         f_name = joinpath(output_dir, "sim_dirs_H$(config_hash).jld2")
+#         if isfile(f_name) && !overwrite
+#             println("$(f_name) found, loading...")
+#             @load f_name dirs
+#         else
+#             @save f_name dirs
+#         end
+#         sim_res["sim_dirs"] = dirs
+#     end
 
-    # Save the metadata to disk
-    f_name = joinpath(output_dir, "metadata_H$(config_hash).txt")
-    if !isfile(f_name) || overwrite
-        open(f_name, "w") do io
-            write(io, metadata)
-        end
-    end
+#     # Save the metadata to disk
+#     f_name = joinpath(output_dir, "metadata_H$(config_hash).txt")
+#     if !isfile(f_name) || overwrite
+#         open(f_name, "w") do io
+#             write(io, metadata)
+#         end
+#     end
 
-    return sim_res
-end
+#     return sim_res
+# end
 
 
 # --- Scratch ---
